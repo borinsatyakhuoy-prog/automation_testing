@@ -165,7 +165,7 @@ Please compile results from:
 - Step 4: Generated automation scripts
 - Step 5: Automated test execution and healing results
 
-Structure the report as: test-results/SCRUM.md
+Structure the report as: test-results/Report.md
 
 Include:
 
@@ -280,7 +280,7 @@ STEP 5 - EXECUTE AND HEAL TESTS:
 Run all automation scripts from tests/fapa-test/. Use the playwright-test-healer agent to identify and auto-heal any failing tests. Re-run tests until all are stable and passing. Document healing activities.
 
 STEP 6 - CREATE TEST REPORT:
-Create a comprehensive test execution report at: test-results/SCRUM-101-checkout-test-report.md
+Create a comprehensive test execution report at: test-results/fapa-test-report.md
 Compile results from Step 3 (manual testing), Step 4 (script generation), and Step 5 (execution and healing). Include PASS/FAIL status, healing summary, defects log, and test coverage analysis.
 
 STEP 7 - COMMIT TO GIT:

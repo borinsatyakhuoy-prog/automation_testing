@@ -13,6 +13,10 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
  */
 export default defineConfig({
   testDir: './tests',
+  /* Playwright wipes this directory at the start of every run. Point it
+   * elsewhere so it never collides with test-results/, which holds our
+   * hand-authored reports (SCRUM.md, exploratory-findings.md). */
+  outputDir: './playwright-output',
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

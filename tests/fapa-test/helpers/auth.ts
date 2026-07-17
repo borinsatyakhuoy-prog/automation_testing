@@ -11,6 +11,16 @@ export function requireCredentials() {
   return { email, password };
 }
 
+export function requireReportClientName() {
+  const clientName = process.env.FAPA_REPORT_CLIENT_NAME;
+  if (!clientName) {
+    throw new Error(
+      'FAPA_REPORT_CLIENT_NAME must be set in a local .env file (see .env.example) to run report generation/validation tests.'
+    );
+  }
+  return clientName;
+}
+
 export async function login(page: Page) {
   const { email, password } = requireCredentials();
   await page.goto('/login');

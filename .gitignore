@@ -6,6 +6,7 @@
 node_modules/
 /test-results/*
 !/test-results/*.md
+/playwright-output/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
@@ -14,3 +15,6 @@ node_modules/
 
 # Secrets - never commit real credentials
 .env
+
+# Real downloaded reports (contain real financial/client data)
+tests/fapa-test/fixtures/downloads/
