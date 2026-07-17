@@ -1,0 +1,24 @@
+{
+  "name": "automtion-ai-ete-testing",
+  "version": "1.0.0",
+  "description": "��#\u0000 \u0000a\u0000u\u0000t\u0000o\u0000m\u0000a\u0000t\u0000i\u0000o\u0000n\u0000_\u0000t\u0000e\u0000s\u0000t\u0000i\u0000n\u0000g\u0000\r\u0000 \u0000",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/borinsatyakhuoy-prog/automation_testing.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/borinsatyakhuoy-prog/automation_testing/issues"
+  },
+  "homepage": "https://github.com/borinsatyakhuoy-prog/automation_testing#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "dotenv": "^16.4.5"
+  }
+}

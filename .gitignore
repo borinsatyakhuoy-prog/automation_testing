@@ -1,0 +1,16 @@
+
+# VS Code MCP config (contains prompted secrets in inputs, keep local)
+.vscode/
+
+# Playwright
+node_modules/
+/test-results/*
+!/test-results/*.md
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+.playwright-mcp/
+
+# Secrets - never commit real credentials
+.env
