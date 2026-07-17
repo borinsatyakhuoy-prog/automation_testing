@@ -17,14 +17,19 @@ export default defineConfig({
    * elsewhere so it never collides with test-results/, which holds our
    * hand-authored reports (SCRUM.md, exploratory-findings.md). */
   outputDir: './playwright-output',
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* This suite runs against a single shared live account (develop-fapa.allweb.cloud),
+   * not an isolated per-test backend. Running tests in parallel caused two real
+   * flakes: two files generating reports for the same client at the same time,
+   * and multiple workers writing trace archives concurrently corrupting a trace
+   * zip. Both reproduced under parallelism and passed cleanly in isolation, so
+   * the whole suite now runs sequentially by default rather than relying on
+   * remembering --workers=1 every time. */
+  fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */

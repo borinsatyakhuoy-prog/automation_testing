@@ -171,3 +171,26 @@ Reviewed all 10 of `fapa_testing`'s per-category upload specs (`001`-`010_upload
 
 ### Confirmed still-reproducing — TODO List "Interlocuteur FP" duplication bug
 `fapa_testing`'s test 007 documented a specific defect: the generated PDF repeats the first row's "Interlocuteur FP" value for every subsequent row, dropping the real values for other rows. This reproduced again in this live run — the ported test marks this column `optional` (logs the gap, doesn't fail the suite on it) rather than silently working around it, so the defect stays visible: `Optional fields not found in PDF (not a failure): Edouard tata BALLANDE`.
+
+---
+
+## Follow-up — Config healing, file reorganization, and a new outputDir variant (2026-07-17, later same day)
+
+### New Issue 12 — Playwright's trace-viewer artifact extraction also touches `test-results/`, independent of `outputDir`
+- **Severity:** N/A (tooling issue in this collection, not the application)
+- **Detail:** Setting `outputDir: './playwright-output'` (New Issue 8, above) stopped the *test run's own* output from wiping `test-results/`, but a later `--trace on` run still created a `test-results/.playwright-artifacts-N/` folder and, in doing so, `SCRUM.md` and this file were deleted again. The artifacts folder itself is correctly gitignored (`/test-results/*` with a `*.md` exception), so nothing unwanted was ever committed - but the lesson stands: verify hand-authored deliverables under `test-results/` still exist after *any* Playwright invocation (including trace/report viewing, not just `test` runs), and treat git as the actual safety net rather than assuming the filesystem is stable between commands.
+
+### Config healed: sequential execution by default
+Two real flakes surfaced when re-running the full suite with 4 parallel workers: a report-generation timeout caused by two files generating reports for the same live client simultaneously, and a corrupted trace `.zip` from concurrent trace writes. Both passed cleanly in isolation. Rather than remembering `--workers=1` every time, `playwright.config.ts` now sets `fullyParallel: false` and `workers: 1` permanently - this suite runs against one shared live account with no per-test isolation, so parallelism was never actually safe here.
+
+### Report lifecycle restructured: 10 dedicated files, full parity restored
+Per feedback that the original port under-covered the report lifecycle (consolidating steps into fewer `test()` cases than the source project) and that each of the 10 critical document types deserved its own dedicated coverage rather than a shared loop, the suite was restructured:
+- `tests/fapa-test/report-lifecycle/001_portfolio.spec.ts` through `010_private-debts.spec.ts` - one file per upload category.
+- Each file restored to ~5-6 tests matching fapa_testing's original granularity: separate Import, Consult, Generate, Validate (now re-downloading afterward too, matching the source), a standalone Download test, and a content-check test where one exists (all categories except Financial Movements).
+- Total automated coverage: 91 tests across 41 files (up from 72 across 33).
+- All "fast" UI test files renamed with sequential 3-digit prefixes (`001_`-`031_`) for clarity, preserving the existing folder-per-feature-area structure.
+
+### Two more transient failures observed and resolved during verification of the new structure
+- A `picture_as_pdf` button didn't appear within 180s on one run of the Financial Movements category, immediately after the config-healing changes. A direct live manual check (outside the test harness) showed the app responding normally within seconds, and a re-run passed cleanly - confirmed as an isolated blip, not a regression from the restructuring.
+- A login briefly redirected back to `/login` instead of `/dashboard` on the 5th test in that same file's re-run. Passed cleanly when that one test was re-run alone.
+- Both are consistent with this environment's established flakiness profile (Issues 4, 6, 10) rather than new defect classes.

@@ -5,12 +5,13 @@ import { login, requireReportClientName } from '../helpers/auth';
 import { readPortfolioExcelData, verifyPdfContainsPortfolioData } from '../helpers/pdfExcelValidator';
 
 /**
- * PORTED FROM: C:\Users\khuoybo\Downloads\Project\fapa_testing (tests/001_upload_model_portefeuille.spec.ts,
- * tests/utils/pdfExcelValidator.ts). That project already automates the full
- * Import -> Consult -> Generate PDF -> Validate PDF -> Download -> content-check
- * cycle for all 10 upload categories; this file ports the pattern (and proves
- * it still holds against the live app as of 2026-07-17) for the "Client Data"
- * / portfolio category as a representative example for this collection.
+ * Category 1 of 10: Client Data / Portfolio.
+ * PORTED FROM: C:\Users\khuoybo\Downloads\Project\fapa_testing
+ * (tests/001_upload_model_portefeuille.spec.ts, tests/utils/pdfExcelValidator.ts).
+ * Each of the 10 upload categories gets its own dedicated file in this
+ * report-lifecycle/ folder (001-010), matching fapa_testing's own per-category
+ * structure - these are business-critical report types, not a single generic
+ * loop. See 002-010 for the other 9 categories.
  *
  * REAL-DATA WARNING: unlike the rest of tests/fapa-test/ (which deliberately
  * cancels every create/import dialog to avoid touching production-like data),
@@ -146,6 +147,38 @@ test('Validate PDF marks the report as verified (skips if already verified)', as
   await expect(page.getByText('Are you sure you want to')).toBeVisible();
   await page.getByRole('button', { name: 'Confirm' }).click();
   await expect(verifiedBadge).toBeVisible({ timeout: 60_000 });
+
+  // fapa_testing's original also re-downloads after validating, as an
+  // independent confirmation that download still works post-validation.
+  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  const redownloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+  await page.getByRole('menuitem', { name: 'Download' }).click();
+  const redownload = await redownloadPromise;
+  await redownload.saveAs(downloadPath);
+});
+
+test('Download PDF produces the same report independently of the Generate/Validate steps', async ({ page }) => {
+  test.setTimeout(120_000);
+  const clientName = requireReportClientName();
+
+  await page.getByRole('button', { name: 'Reports' }).click();
+  const clientField = page.getByRole('textbox', { name: 'Select a client' });
+  await clientField.fill(clientName.split(' ')[0]);
+  await clientField.click();
+  await page.getByRole('menuitem', { name: clientName }).click();
+  await page.getByRole('button', { name: 'Consult' }).click();
+  await page.waitForLoadState('networkidle');
+
+  await page.getByRole('button').filter({ hasText: 'list' }).click();
+  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+  await page.getByRole('menuitem', { name: 'Download' }).click();
+  const download = await downloadPromise;
+
+  fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
+  await download.saveAs(downloadPath);
+  expect(fs.existsSync(downloadPath)).toBeTruthy();
 });
 
 // This is the actual "report content validation" test: it cross-checks the

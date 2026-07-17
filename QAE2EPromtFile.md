@@ -287,4 +287,5 @@ STEP 7 - COMMIT TO GIT:
 Use the GitHub MCP agent to commit all new files with a descriptive message and push to the repository.
 
 Execute this complete workflow and provide status updates after each step.
+And after finish workflow help show the result by running  npx playwright show-report & npx playwright test --trace on
 ```
