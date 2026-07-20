@@ -257,6 +257,52 @@ Please perform the following Git operations:
 
 ---
 
+## STEP 8: Smart Re-run (Incremental Update)
+
+Use this after a first full run has already completed at least once, instead of repeating Steps 1–7 from scratch every time.
+
+**Prompt:**
+```
+Now I want to re-run the QA workflow, but only redo what's necessary based on what changed
+since the last run. Please:
+
+1. Compare the current user story (user-stories/SCRUM.md) and test plan (specs/planner.md)
+   against what the existing automation scripts (tests/fapa-test/) and last test report
+   (test-results/Report.md) were built from.
+
+2. Decide the re-run scope:
+
+   - FULL RE-RUN (redo Steps 2–7) if the user story or test plan itself changed
+     (new/changed acceptance criteria, new scenarios, changed test data or credentials):
+       - Step 2: Update/regenerate the test plan
+       - Step 3: Re-run exploratory testing for the affected/new scenarios
+       - Step 4: Regenerate or update automation scripts
+       - Step 5: Execute and heal
+       - Step 6: Update the test report
+       - Step 7: Commit and push
+
+   - PARTIAL RE-RUN (Steps 4–7 only) if the test plan is unchanged and only the
+     application itself, its selectors, or the existing scripts need adjustment:
+       - Step 4: Update only the affected automation scripts (do not re-plan or
+         re-explore from scratch)
+       - Step 5: Execute and heal the updated/failing scripts using the
+         playwright-test-healer agent
+       - Step 6: Update the test report with the new results
+       - Step 7: Commit and push only the changed files
+
+3. Before doing any work, state clearly which mode you chose (FULL or PARTIAL) and why,
+   listing the specific files that triggered that decision.
+
+4. Proceed with only the steps required for the chosen mode.
+```
+
+**Expected Output:**
+- A clear FULL vs. PARTIAL decision with justification (which files changed)
+- Only the necessary steps executed — no redundant re-planning or re-exploration when the test plan hasn't changed
+- Updated automation scripts, test report, and Git commit reflecting just the incremental change
+
+---
+
 ## 🎬 Complete Workflow Execution
 
 **Single Combined Prompt (for Video Demo):**
