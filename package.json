@@ -18,8 +18,9 @@
   "homepage": "https://github.com/borinsatyakhuoy-prog/automation_testing#readme",
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "allure-playwright": "^3.6.0",
     "@types/node": "^26.1.1",
+    "allure": "^3.14.3",
+    "allure-playwright": "^3.6.0",
     "dotenv": "^16.4.5",
     "pdf-parse": "^1.1.1",
     "typescript": "^5.6.3",

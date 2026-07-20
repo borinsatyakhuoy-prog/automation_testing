@@ -300,6 +300,16 @@ The one deliberate, real-write exception is the report-lifecycle suite (Import F
   2. Close/cancel the dialog without changing or saving anything
     - expect: The dialog closes and the row's values in the table are unchanged
 
+#### 9.4. Discovered: Export/Import/Edit mechanics and report linkage (2026-07-20 investigation, real writes against new synthetic records only)
+
+Investigated live (not yet automated) to understand the full Export -> Import-to-new-month -> Edit -> report-effect lifecycle, per the same data-safety principle as the report-lifecycle client: only new, self-created records were touched, never existing ISIN rows.
+
+- **Export** downloads `isin_<year>-<month>.xlsx` (sheet `isin_detail`) with columns `Code ISIN | Libellé | Classe d'actifs | Zone géographique | Devise | Cours | Secteur` - this is the exact shape an Import file must match.
+- **Import** requires a `Date of file` (MM/YYYY) via a calendar picker capped to years 2003-2026 (no future years beyond the current one are selectable) - importing to a month with no existing data is purely additive, confirmed via a test ISIN ("QATEST00001", month 08/2026, 2,438 -> 1 row shown once filtered to that month).
+- **Edit** (on an existing or newly-imported row) locks `MM/YYYY` and `ISIN Code` (both disabled/read-only) but allows Security Name, Asset Class, Geo Zone, Currency, Price, and Industry Sector to be changed and saved for real - confirmed by editing the test row's Price from 123.45 to 999.99 and seeing it persist in the table.
+- **Report linkage confirmed:** searching the ISIN table for "CAC" surfaces a row with ISIN Code "CAC", Security Name "CAC40", Asset Class "Indices" - this is the literal source of the "Indicateurs de marchés" benchmark table shown in every generated client report (confirmed by cross-referencing against the PDF text extracted during the report-lifecycle work). This means ISIN rows with Asset Class "Indices" are genuinely global, shared-across-all-reports reference data, not client-scoped - reinforcing why editing *existing* rows (real index values used in every real client's report) would be far riskier than the report-lifecycle client migration, and why this investigation only touched newly-created records.
+- Not yet confirmed: whether a non-"Indices" security (like the test ISIN created here) ever surfaces in any report at all, since it isn't held by any client's portfolio and isn't a benchmark index - this would need a client whose portfolio fixture references that exact ISIN code to test further.
+
 ### 10. Markets - Currency
 
 **Seed:** `tests/seed.spec.ts`
@@ -317,6 +327,13 @@ The one deliberate, real-write exception is the report-lifecycle suite (Import F
     - expect: An add-currency form/dialog opens
   4. Close/cancel the dialog without submitting
     - expect: The dialog closes and no new currency row is added to the table
+
+#### 10.2. Discovered: Export/Add/Edit mechanics (2026-07-20 investigation, real writes against a new synthetic record only)
+
+- **Export** downloads `devise_<year>-<month>.xlsx` (sheet `currency_detail`) with columns `Devise | Libellé | Taux d'échange` - only 14 currencies exist total (far fewer than the 2,438 ISIN rows).
+- **Add Currency** (single-row form, separate from bulk Import) takes `MM/YYYY*`, `From EUR To*`, `Exchange Rate*`, and an optional `Label`. Notable quirk: typing just a currency code (e.g. "QAT") into "From EUR To" gets auto-prefixed with "EUR" by the app, producing "EURQAT" in the table - the field expects only the *target* currency code, not the full pair.
+- **Edit** locks `MM/YYYY` and `From EUR To` (disabled) but allows Exchange Rate and Label to be changed and saved for real - confirmed by editing a test entry's rate from 2.5 to 7.77 and seeing it persist.
+- Same real-write, new-records-only safety principle as ISIN (9.4) applies here.
 
 ### 11. Upload
 

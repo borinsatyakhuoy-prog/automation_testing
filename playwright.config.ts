@@ -30,6 +30,9 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   workers: 1,
+  /* Writes allure-results/environment.properties so the Allure report's
+   * Environment widget isn't empty. */
+  globalSetup: require.resolve('./tests/global-setup'),
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [['list'], ['html'], ['allure-playwright']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -37,10 +40,14 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('')`. */
     baseURL: process.env.FAPA_BASE_URL,
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* 'retain-on-failure' (not the previous 'on-first-retry') - traces are
+     * recorded for every test but only kept for ones that actually fail.
+     * 'on-first-retry' never triggered locally at all, since retries is 0
+     * outside CI (see retries above) - there was never a "first retry" to
+     * capture a trace on. */
+    trace: 'retain-on-failure',
 
-    /* Capture a screenshot on failure for debugging/healing. */
+    /* Capture a screenshot on failure only, for debugging/healing. */
     screenshot: 'only-on-failure',
 
     /* Family Partners charts/tables clip content below this size. Kept as

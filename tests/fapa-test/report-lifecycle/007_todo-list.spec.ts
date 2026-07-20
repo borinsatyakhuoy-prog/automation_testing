@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { login, requireReportClientName } from '../helpers/auth';
+import { consultReport } from '../helpers/reports';
 import { readExpectedColumnValues, verifyPdfContainsColumnValues } from '../helpers/pdfExcelValidator';
 import { UPLOAD_CATEGORIES, excelFixturePath, downloadPathFor } from '../helpers/uploadCategories';
 
@@ -68,25 +69,15 @@ test('Consult renders the report for the client and current month', async ({ pag
   test.setTimeout(60_000);
   const clientName = requireReportClientName();
 
-  await page.getByRole('button', { name: 'Reports' }).click();
-  const clientField = page.getByRole('textbox', { name: 'Select a client' });
-  await clientField.fill(clientName.split(' ')[0]);
-  await clientField.click();
-  await page.getByRole('menuitem', { name: clientName }).click();
-  await page.getByRole('button', { name: 'Consult' }).click();
-  await expect(page.getByText(/report is being generated/i)).toBeVisible();
+  await consultReport(page, clientName);
+  await expect(page.getByText(/report is being generated/i)).toBeVisible({ timeout: 20_000 });
 });
 
 test('Generate PDF produces a downloadable report', async ({ page }) => {
   test.setTimeout(180_000);
   const clientName = requireReportClientName();
 
-  await page.getByRole('button', { name: 'Reports' }).click();
-  const clientField = page.getByRole('textbox', { name: 'Select a client' });
-  await clientField.fill(clientName.split(' ')[0]);
-  await clientField.click();
-  await page.getByRole('menuitem', { name: clientName }).click();
-  await page.getByRole('button', { name: 'Consult' }).click();
+  await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
   await page.getByRole('button').filter({ hasText: 'picture_as_pdf' }).click();
@@ -114,12 +105,7 @@ test('Validate PDF (skips if already verified)', async ({ page }) => {
   test.setTimeout(120_000);
   const clientName = requireReportClientName();
 
-  await page.getByRole('button', { name: 'Reports' }).click();
-  const clientField = page.getByRole('textbox', { name: 'Select a client' });
-  await clientField.fill(clientName.split(' ')[0]);
-  await clientField.click();
-  await page.getByRole('menuitem', { name: clientName }).click();
-  await page.getByRole('button', { name: 'Consult' }).click();
+  await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
   await page.getByRole('button').filter({ hasText: 'list' }).click();
@@ -147,12 +133,7 @@ test('Download PDF produces the same report independently of the Generate/Valida
   test.setTimeout(120_000);
   const clientName = requireReportClientName();
 
-  await page.getByRole('button', { name: 'Reports' }).click();
-  const clientField = page.getByRole('textbox', { name: 'Select a client' });
-  await clientField.fill(clientName.split(' ')[0]);
-  await clientField.click();
-  await page.getByRole('menuitem', { name: clientName }).click();
-  await page.getByRole('button', { name: 'Consult' }).click();
+  await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
   await page.getByRole('button').filter({ hasText: 'list' }).click();
