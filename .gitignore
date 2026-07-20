@@ -12,6 +12,8 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 .playwright-mcp/
+/allure-results/
+/allure-report/
 
 # Secrets - never commit real credentials
 .env

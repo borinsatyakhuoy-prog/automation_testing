@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { login, requireReportClientName } from '../helpers/auth';
-import { readExpectedColumnValues, verifyPdfContainsColumnValues } from '../helpers/pdfExcelValidator';
 import { UPLOAD_CATEGORIES, excelFixturePath, downloadPathFor } from '../helpers/uploadCategories';
 
 /**
@@ -164,22 +163,9 @@ test('Download PDF produces the same report independently of the Generate/Valida
   expect(fs.existsSync(downloadPath)).toBeTruthy();
 });
 
-test('Downloaded PDF content matches the imported Excel data', async () => {
-  const clientName = requireReportClientName();
-  const config = category.excelValidation!(clientName);
-  const expected = readExpectedColumnValues(excelFixturePath(category), config);
-  const { results } = await verifyPdfContainsColumnValues(downloadPathFor(category), expected);
-
-  const optionalLabels = new Set(config.columns.filter((c) => c.optional).map((c) => c.label));
-  const requiredMissing = results.filter((r) => !optionalLabels.has(r.label)).flatMap((r) => r.missing);
-  const optionalMissing = results.filter((r) => optionalLabels.has(r.label)).flatMap((r) => r.missing);
-
-  if (optionalMissing.length > 0) {
-    console.log(`Optional fields not found in PDF (not a failure): ${optionalMissing.join(', ')}`);
-  }
-
-  expect(
-    requiredMissing,
-    `PDF is missing expected data from the source Excel: ${requiredMissing.join(', ')}`
-  ).toEqual([]);
-});
+// No content-validation test here: confirmed (2026-07-20) that the
+// consolidated wealth report PDF has no section for real estate at all -
+// property names, and even the generic strings "immobilier"/"bien"/"loyer",
+// never appear anywhere in it. Matches Financial Movements, which
+// fapa_testing likewise never built content-validation for. See
+// uploadCategories.ts and exploratory-findings.md Issue 13.

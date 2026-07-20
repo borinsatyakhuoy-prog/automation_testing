@@ -7,15 +7,23 @@ const pdf = require('pdf-parse');
 export interface PortfolioExpectedData {
   accounts: string[];
   isins: string[];
-  cours: string[];
 }
 
 const ALLOWED_ACCOUNT_TYPES = ['Assurance vie', 'Compte titres', 'PEA - nanti'];
 
 /**
- * Reads the account number, ISIN code, and price ("Cours") columns from a
- * portfolio import Excel fixture, filtered to the account types the report
- * actually surfaces.
+ * Reads the account number and ISIN code columns from a portfolio import
+ * Excel fixture, filtered to the account types the report actually surfaces.
+ *
+ * "Cours" (price/quote) was checked here too until this fixture's content
+ * validation actually ran to completion for the first time (2026-07-20) and
+ * revealed it never passes: the report doesn't echo the raw imported price
+ * anywhere in its text - it only shows computed valuation totals and
+ * percentages derived from it (e.g. "-23 220 EUR", "-10 654,45%"), which
+ * don't match the source number. The fixture also gives every row the exact
+ * same placeholder Cours value, which wouldn't have been a meaningful,
+ * discriminating check even if the report did echo it raw. Account numbers
+ * and ISIN codes, by contrast, are confirmed to appear verbatim.
  */
 export function readPortfolioExcelData(excelPath: string): PortfolioExpectedData {
   if (!fs.existsSync(excelPath)) {
@@ -33,15 +41,12 @@ export function readPortfolioExcelData(excelPath: string): PortfolioExpectedData
   return {
     accounts: unique(filtered.map((r) => r['Nom et N. de compte'])),
     isins: unique(filtered.map((r) => r['Code ISIN'])),
-    cours: unique(filtered.map((r) => r['Cours'])),
   };
 }
 
 /**
  * Parses a downloaded PDF report and checks whether the given portfolio data
- * (account numbers, ISIN codes, prices) is present in its text content.
- * Prices also match against their rounded integer form, since the PDF may
- * round displayed values.
+ * (account numbers, ISIN codes) is present in its text content.
  */
 export async function verifyPdfContainsPortfolioData(
   pdfPath: string,
@@ -59,32 +64,22 @@ export async function verifyPdfContainsPortfolioData(
   const data = await pdf(dataBuffer);
   const normalizedPdfText = data.text.replace(/\s+/g, '').toLowerCase();
 
-  const checkItems = (items: string[], isPrice = false) => {
+  const checkItems = (items: string[]) => {
     const found: string[] = [];
     const missing: string[] = [];
     for (const item of items) {
       const normalizedItem = item.replace(/[\s,]/g, '').toLowerCase();
-      let matchFound = normalizedPdfText.includes(normalizedItem);
-
-      if (!matchFound && isPrice) {
-        const num = parseFloat(item.replace(/,/g, ''));
-        if (!isNaN(num) && normalizedPdfText.includes(Math.round(num).toString())) {
-          matchFound = true;
-        }
-      }
-
-      (matchFound ? found : missing).push(item);
+      (normalizedPdfText.includes(normalizedItem) ? found : missing).push(item);
     }
     return { found, missing };
   };
 
   const accounts = checkItems(expected.accounts);
   const isins = checkItems(expected.isins);
-  const cours = checkItems(expected.cours, true);
 
   return {
-    found: [...accounts.found, ...isins.found, ...cours.found],
-    missing: [...accounts.missing, ...isins.missing, ...cours.missing],
+    found: [...accounts.found, ...isins.found],
+    missing: [...accounts.missing, ...isins.missing],
   };
 }
 

@@ -46,7 +46,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Portfolio',
     dropdownMatch: /^Portfolio$/,
     excelFileName: '1. JDD_model_portefeuille.xlsx',
-    importComment: 'Automated report-content-validation test (ported from fapa_testing)',
+    importComment: 'Automated report-content-validation test - automation_testing 001_portfolio.spec.ts',
     // Category 1 uses the dedicated readPortfolioExcelData/verifyPdfContainsPortfolioData
     // functions instead (already implemented and verified separately) - no generic config needed.
   },
@@ -55,7 +55,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Financial Movements',
     dropdownMatch: /^Financial Movements$/,
     excelFileName: '2. JDD_model_mouvement_financier.xlsx',
-    importComment: 'Ported from fapa_testing 002_upload_model_mouvement_finanacier.spec.ts',
+    importComment: 'Automated upload test - automation_testing 002_financial-movements.spec.ts',
     // fapa_testing never built content-validation for this category either.
   },
   {
@@ -63,7 +63,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Liabilities',
     dropdownMatch: 'Liabilities',
     excelFileName: '3. JDD_model_passif.xlsx',
-    importComment: 'Ported from fapa_testing 003_upload_model_passif.spec.ts',
+    importComment: 'Automated upload test - automation_testing 003_passive.spec.ts',
     excelValidation: (clientName) => ({
       rowFilter: (row) => row['Client']?.toString().trim() === clientName,
       columns: [
@@ -79,18 +79,15 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Real Estate Assets',
     dropdownMatch: 'Real Estate Assets',
     excelFileName: '4. JDD_model_actif_immobilier.xlsx',
-    importComment: 'Ported from fapa_testing 004_upload_model_actif_immobilier.spec.ts',
-    excelValidation: (clientName) => ({
-      rowFilter: (row) => row['Propriétaire']?.toString().trim() === clientName,
-      columns: [
-        { column: 'Propriétaire', label: 'Owner' },
-        { column: 'Nom du bien', label: 'Property Name' },
-        { column: 'Acquisition', label: 'Acquisition Price', transform: cleanCurrency },
-        { column: 'Estimation', label: 'Estimation', transform: cleanCurrency },
-        { column: 'Travaux', label: 'Travaux', transform: cleanCurrency, optional: true },
-        { column: 'Différentiel', label: 'Différentiel', transform: cleanCurrency, optional: true },
-      ],
-    }),
+    importComment: 'Automated upload test - automation_testing 004_rental-management.spec.ts',
+    // No excelValidation: confirmed empirically (2026-07-20, first time this
+    // category's content-check ran to completion) that the consolidated
+    // wealth report PDF has no section for real estate at all - not even the
+    // owner-agnostic strings "immobilier"/"bien"/"loyer" appear anywhere in
+    // it, let alone individual property names. Matches Financial Movements
+    // (below), which fapa_testing likewise never built content-validation
+    // for - both categories are importable but apparently not represented in
+    // this report. See exploratory-findings.md Issue 13.
   },
   {
     key: 'private-equity-summary',
@@ -98,7 +95,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     // The option's accessible text has an icon ligature baked in ahead of the label.
     dropdownMatch: /^real_estate_agentPrivate Equity Summary$/,
     excelFileName: '5. JDD_model_synthese_private_equity.xlsx',
-    importComment: 'Ported from fapa_testing 005_upload_model_synthese_private_equity.spec.ts',
+    importComment: 'Automated upload test - automation_testing 005_private-equity-summary.spec.ts',
     excelValidation: () => ({
       columns: [
         { column: 'Souscripteur', label: 'Souscripteur' },
@@ -115,7 +112,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Artwork',
     dropdownMatch: 'Artwork',
     excelFileName: '6. JDD_model_oeuvre_art.xlsx',
-    importComment: 'Ported from fapa_testing 006_upload_model_oeuvre_art.spec.ts',
+    importComment: 'Automated upload test - automation_testing 006_works-of-art.spec.ts',
     excelValidation: () => ({
       columns: [
         { column: "Nom de l'artiste", label: 'Artist' },
@@ -134,7 +131,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Follow-up TODO List',
     dropdownMatch: 'Follow-up TODO List',
     excelFileName: '7. JDD_model_todolist.xlsx',
-    importComment: 'Ported from fapa_testing 007_upload_model_todolist.spec.ts',
+    importComment: 'Automated upload test - automation_testing 007_todo-list.spec.ts',
     excelValidation: () => ({
       columns: [
         // Known app bug (documented in fapa_testing): the PDF duplicates the
@@ -155,7 +152,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Private Equity Funds',
     dropdownMatch: /^Private Equity Funds$/,
     excelFileName: '8. JDD_model_fond_private_equity.xlsx',
-    importComment: 'Ported from fapa_testing 008_upload_model_fond_private_equity.spec.ts',
+    importComment: 'Automated upload test - automation_testing 008_private-equity-funds.spec.ts',
     excelValidation: () => ({
       columns: [
         { column: "Fonds d'investissement", label: 'Fund' },
@@ -171,7 +168,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Structured Products',
     dropdownMatch: /^Structured Products$/,
     excelFileName: '9. JDD_model_product_structure.xlsx',
-    importComment: 'Ported from fapa_testing 009_upload_model_product_structure.spec.ts',
+    importComment: 'Automated upload test - automation_testing 009_structured-products.spec.ts',
     excelValidation: () => ({
       columns: [
         { column: 'Code ISIN', label: 'ISIN' },
@@ -188,7 +185,7 @@ export const UPLOAD_CATEGORIES: UploadCategory[] = [
     dropdownLabel: 'Private Debts',
     dropdownMatch: /^Private Debts$/,
     excelFileName: '10. JDD_model_dette_privee.xlsx',
-    importComment: 'Ported from fapa_testing 010_upload_model_dette_privee.spec.ts',
+    importComment: 'Automated upload test - automation_testing 010_private-debts.spec.ts',
     excelValidation: () => ({
       columns: [
         { column: 'Client', label: 'Client' },

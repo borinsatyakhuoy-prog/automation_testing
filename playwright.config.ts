@@ -31,7 +31,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [['list'], ['html'], ['allure-playwright']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
@@ -43,7 +43,13 @@ export default defineConfig({
     /* Capture a screenshot on failure for debugging/healing. */
     screenshot: 'only-on-failure',
 
-    /* Family Partners charts/tables clip content below this size. */
+    /* Family Partners charts/tables clip content below this size. Kept as
+     * the default for every project except chromium below, which gets an
+     * equivalent effective size through a real OS window instead (see its
+     * comment) so headed runs render at native scale instead of
+     * CDP-scaled-down inside a small window. Firefox/WebKit don't reliably
+     * honor a --window-size-style launch arg the way Chromium does, so they
+     * keep this CDP-based override to guarantee the same rendered size. */
     viewport: { width: 2000, height: 1200 },
   },
 
@@ -51,7 +57,22 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // deviceScaleFactor from the preset above can't be combined with a
+        // null viewport, so drop it.
+        deviceScaleFactor: undefined,
+        // null disables the CDP device-metrics override from the shared
+        // viewport above; the real OS window (sized below) becomes the
+        // viewport instead. Verified this renders at exactly 2000x1200 in
+        // BOTH headless and headed Chromium, so it's safe as the default,
+        // and headed runs now show a correctly-sized window instead of a
+        // small one with the page scaled down inside it.
+        viewport: null,
+        launchOptions: {
+          args: ['--window-size=2000,1200', '--window-position=0,0'],
+        },
+      },
     },
 
     {

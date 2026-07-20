@@ -33,6 +33,10 @@ Credentials are not stored in this file. Copy `.env.example` to a local `.env`
 `FAPA_REPORT_CLIENT_NAME` for report-generation tests) there. The automated
 suite in `tests/fapa-test/` reads these same variables.
 
+`FAPA_REPORT_CLIENT_NAME` must point to a dedicated synthetic client created
+specifically for automation (see the Business Rules note below) - never a
+real production-like client, even one belonging to the account owner.
+
 ## Acceptance Criteria
 
 ### AC1: Authentication
@@ -89,12 +93,19 @@ suite in `tests/fapa-test/` reads these same variables.
 - Generated reports appear in a "This month" / "Other Months" list, each
   with a Download action and a "Validate PDF" action that permanently marks
   the report as reviewed (a "verified" badge).
-- The downloaded PDF's content (account numbers, ISIN codes, prices) must
-  match the source data that was imported for that client/month — this is
-  now covered by an automated content-validation test
-  (tests/fapa-test/reports/report-generate-download-validate.spec.ts),
-  ported from a companion project (fapa_testing) that already proved this
-  pattern out across all 10 upload categories.
+- The downloaded PDF's content (account numbers, ISIN codes, and per-category
+  identifying data) must match the source data that was imported for that
+  client/month — this is covered by automated content-validation tests, one
+  dedicated file per upload category (tests/fapa-test/report-lifecycle/
+  001_portfolio.spec.ts through 010_private-debts.spec.ts), ported from a
+  companion project (fapa_testing).
+- Not every upload category is actually represented in this consolidated
+  report: confirmed present are Portfolio, Liabilities, Artwork, Private
+  Equity (Summary + Funds), Structured Products, Private Debts, and TODO
+  List; confirmed absent — no matching content anywhere in the PDF, not even
+  the category name — are Financial Movements and Real Estate Assets, even
+  though both import successfully via Upload. Whether this is intentional or
+  a gap is unconfirmed (see Issue 13 in the exploratory findings).
 - Selecting a month with no underlying report data produces a handled
   outcome rather than an unhandled error — observed as either an "Invalid
   month to generate report." message or a "Copy data" prompt depending on
@@ -122,9 +133,15 @@ suite in `tests/fapa-test/` reads these same variables.
 - The application manages real, production-like client and user data (not
   synthetic fixtures) even in the "develop" environment — automated tests
   must default to read-only interactions and cancel any create/edit dialog
-  unless a test is specifically and deliberately exercising a real write
-  (as the report-generation tests do, matching the account owner's own
-  established practice).
+  unless a test is specifically and deliberately exercising a real write.
+- Report-generation tests are the one deliberate exception that writes real
+  data (client creation, password reset, file import), and they do so
+  against a dedicated synthetic client ("QA Automation Client") created
+  specifically for this purpose - never against a real production-like
+  client, including ones belonging to the account owner. The client's Excel
+  name, email, and password are all synthetic/randomized, and all 10 Excel
+  fixtures were updated so their embedded client-identifying columns
+  (Client / Propriétaire / Souscripteur) reference this same synthetic name.
 
 ## Technical Notes
 - Use Playwright for test automation.
