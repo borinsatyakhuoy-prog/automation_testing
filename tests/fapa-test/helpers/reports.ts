@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, Locator } from '@playwright/test';
 
 /**
  * Navigates to Reports, selects the given client, and clicks Consult.
@@ -52,4 +52,52 @@ export async function consultReport(page: Page, clientName: string) {
   await page.locator('.mat-mdc-menu-item').first().waitFor({ state: 'hidden' }).catch(() => {});
 
   await page.getByRole('button', { name: 'Consult' }).click();
+}
+
+/**
+ * Clicks `locator` with a bounded per-attempt timeout, retrying a few times
+ * (Escape + a short pause between attempts) instead of one long wait.
+ *
+ * Root cause of a real, reproducible flake (2026-07-21, multiple sessions):
+ * the report toolbar's "list" view-toggle button and the generated-report
+ * row's "more_vert" menu button occasionally became unclickable for well
+ * over 60s in a single continuous test run (same family as this project's
+ * already-documented Issue 4/New Issue 7 - Material component click
+ * reliability), even though the exact same click on the exact same button,
+ * re-run moments later in a fresh isolated test, always succeeded within
+ * seconds. That pattern - fine in isolation, occasionally stuck mid-run -
+ * pointed at a transient UI-thread/animation hang rather than a genuinely
+ * broken locator, so a single long wait doesn't help as much as several
+ * short, independent attempts: each attempt gets its own fresh actionability
+ * check, and Escape clears any lingering overlay/ripple between tries.
+ */
+async function clickWithRetry(locator: Locator, attempts = 3, perAttemptTimeoutMs = 15_000) {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await locator.click({ timeout: perAttemptTimeoutMs });
+      return;
+    } catch (err) {
+      lastError = err;
+      await locator.page().keyboard.press('Escape').catch(() => {});
+      await locator.page().waitForTimeout(1_000);
+    }
+  }
+  throw lastError;
+}
+
+/** Opens the "This month" / "Other Months" generated-reports list view. */
+export async function openMonthReportsList(page: Page) {
+  await clickWithRetry(page.getByRole('button').filter({ hasText: 'list' }));
+}
+
+/**
+ * Opens the row-level actions menu (Download / Validate PDF) for a generated
+ * report entry. Index 1, not 0: index 0 resolves to a hidden more_vert
+ * element elsewhere on the page - index 1 is "This month"'s entry, confirmed
+ * both via live exploration and the equivalent locator in the ported
+ * fapa_testing suite.
+ */
+export async function openMonthReportActionsMenu(page: Page, index = 1) {
+  await clickWithRetry(page.locator('button').filter({ hasText: 'more_vert' }).nth(index));
 }

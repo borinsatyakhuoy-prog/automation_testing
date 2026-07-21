@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { login, requireReportClientName } from '../helpers/auth';
-import { consultReport } from '../helpers/reports';
+import { consultReport, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
 import { readExpectedColumnValues, verifyPdfContainsColumnValues } from '../helpers/pdfExcelValidator';
 import { UPLOAD_CATEGORIES, excelFixturePath, downloadPathFor } from '../helpers/uploadCategories';
 
@@ -88,8 +88,8 @@ test('Generate PDF produces a downloadable report', async ({ page }) => {
     await page.waitForTimeout(15_000);
   }
 
-  await page.getByRole('button').filter({ hasText: 'list' }).click();
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportsList(page);
+  await openMonthReportActionsMenu(page);
 
   const downloadPath = downloadPathFor(category);
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
@@ -108,8 +108,8 @@ test('Validate PDF (skips if already verified)', async ({ page }) => {
   await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button').filter({ hasText: 'list' }).click();
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportsList(page);
+  await openMonthReportActionsMenu(page);
 
   const verifiedBadge = page.getByText('verified').first();
   if (await verifiedBadge.isVisible().catch(() => false)) {
@@ -122,7 +122,7 @@ test('Validate PDF (skips if already verified)', async ({ page }) => {
   await page.getByRole('button', { name: 'Confirm' }).click();
   await expect(verifiedBadge).toBeVisible({ timeout: 60_000 });
 
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportActionsMenu(page);
   const redownloadPromise = page.waitForEvent('download', { timeout: 30_000 });
   await page.getByRole('menuitem', { name: 'Download' }).click();
   const redownload = await redownloadPromise;
@@ -136,8 +136,8 @@ test('Download PDF produces the same report independently of the Generate/Valida
   await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button').filter({ hasText: 'list' }).click();
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportsList(page);
+  await openMonthReportActionsMenu(page);
 
   const downloadPath = downloadPathFor(category);
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });

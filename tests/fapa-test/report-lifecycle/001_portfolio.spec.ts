@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import { login, requireReportClientName } from '../helpers/auth';
-import { consultReport } from '../helpers/reports';
+import { consultReport, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
 import { readPortfolioExcelData, verifyPdfContainsPortfolioData } from '../helpers/pdfExcelValidator';
 
 /**
@@ -93,11 +93,8 @@ test('Generate PDF produces a downloadable report', async ({ page }) => {
     await page.waitForTimeout(15_000);
   }
 
-  await page.getByRole('button').filter({ hasText: 'list' }).click();
-  // Index 1, not 0: index 0 resolves to a hidden more_vert element elsewhere
-  // on the page. Index 1 is "This month"'s entry - confirmed both via live
-  // exploration and matching the equivalent locator in the ported fapa_testing suite.
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportsList(page);
+  await openMonthReportActionsMenu(page);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
   await page.getByRole('menuitem', { name: 'Download' }).click();
@@ -115,9 +112,8 @@ test('Validate PDF marks the report as verified (skips if already verified)', as
   await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button').filter({ hasText: 'list' }).click();
-  // Index 1: index 0 resolves to a hidden more_vert element elsewhere on the page.
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportsList(page);
+  await openMonthReportActionsMenu(page);
 
   const verifiedBadge = page.getByText('verified').first();
   if (await verifiedBadge.isVisible().catch(() => false)) {
@@ -132,7 +128,7 @@ test('Validate PDF marks the report as verified (skips if already verified)', as
 
   // fapa_testing's original also re-downloads after validating, as an
   // independent confirmation that download still works post-validation.
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportActionsMenu(page);
   const redownloadPromise = page.waitForEvent('download', { timeout: 30_000 });
   await page.getByRole('menuitem', { name: 'Download' }).click();
   const redownload = await redownloadPromise;
@@ -146,8 +142,8 @@ test('Download PDF produces the same report independently of the Generate/Valida
   await consultReport(page, clientName);
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button').filter({ hasText: 'list' }).click();
-  await page.locator('button').filter({ hasText: 'more_vert' }).nth(1).click();
+  await openMonthReportsList(page);
+  await openMonthReportActionsMenu(page);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
   await page.getByRole('menuitem', { name: 'Download' }).click();

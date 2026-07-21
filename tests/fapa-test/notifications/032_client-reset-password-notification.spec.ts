@@ -17,8 +17,29 @@ test.describe('Mail Service - Client Reset Password Notification', () => {
 
     await test.step('Open Reset Password for the dedicated mail-test client', async () => {
       await page.getByRole('textbox', { name: 'searchbar' }).fill(searchTerm);
-      await page.getByRole('button', { name: 'Example icon-button with a menu' }).first().click();
-      await page.getByRole('menuitem', { name: 'Reset password' }).click();
+
+      // Retries the whole open-menu -> click-menuitem sequence, not just the
+      // click: a real, reproducible flake (2026-07-21, seen repeatedly) is
+      // the row re-rendering (a background list refresh) between opening the
+      // kebab menu and clicking "Reset password", detaching the menuitem
+      // mid-click. Re-opening the menu fresh on retry sidesteps that rather
+      // than retrying a click on an already-stale element reference.
+      let opened = false;
+      for (let attempt = 0; attempt < 3 && !opened; attempt++) {
+        try {
+          await page.getByRole('button', { name: 'Example icon-button with a menu' }).first().click();
+          await page.getByRole('menuitem', { name: 'Reset password' }).click({ timeout: 10_000 });
+          opened = true;
+        } catch {
+          await page.keyboard.press('Escape').catch(() => {});
+          await page.waitForTimeout(1_000);
+        }
+      }
+      if (!opened) {
+        await page.getByRole('button', { name: 'Example icon-button with a menu' }).first().click();
+        await page.getByRole('menuitem', { name: 'Reset password' }).click();
+      }
+
       await expect(page.getByRole('heading', { name: 'Reset Password' })).toBeVisible();
     });
 
