@@ -279,3 +279,14 @@ Full step detail and exact endpoints in specs/planner.md §16. Checked how 5 key
 - **Expected:** Some visible error, or at minimum a failed-download indication.
 - **Actual:** No download fires and no message of any kind appears - the ISIN table just sits there as if Export was never clicked.
 - **Impact:** Same class of silent failure as Issues 16/17, lower frequency/stakes since Export is a read-only convenience action rather than a core workflow step.
+
+## Follow-up - Performance baseline and a tail-latency finding for Reports Consult (2026-07-21)
+
+Full detail and the GOOD/SLOW rating table in specs/planner.md section 17. Headline: everything measured is fast (Login, Dashboard, Clients list, Reports Consult all rate GOOD, generally under 2s) except PDF Generation at 35.6s - the one clear, isolated bottleneck, roughly 20-65x slower than every other flow.
+
+### Issue 19 - Reports Consult has occasional multi-second-plus tail latency not visible in a single clean measurement
+- **Severity:** Low (intermittent, not reproduced on demand; no user-facing error, just a slow/absent progress indicator)
+- **Steps to reproduce:** Not reliably reproducible in isolation - only observed after the shared live account/session had already been under sustained continuous load from many prior tests in the same run (several full-suite executions this same day, each exercising 100+ tests back-to-back).
+- **Expected:** Consult's "report is being generated" progress indicator appears within a few seconds, consistent with the isolated baseline measurement of 1,775ms (specs/planner.md section 17).
+- **Actual:** In at least two full-suite runs this day, the same assertion (with a 20s timeout) - in `tests/fapa-test/performance/041_reports-consult-performance.spec.ts` and in more than one report-lifecycle file's own "Consult" test - timed out outright. Every one of these passed cleanly on an immediate isolated re-run afterward.
+- **Impact:** The performance baseline in section 17 should be read as "typical," not "guaranteed" - Consult is genuinely fast under normal conditions but shows the same family of load-sensitive tail latency as the report-lifecycle click-hang flakes (see the healing work in test-results/Report.md section 3e), just less frequently and less severely than those.

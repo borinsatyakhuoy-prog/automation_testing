@@ -132,6 +132,8 @@ Measured via the browser's own Navigation Timing Level 2 / Paint Timing / Resour
 
 **Headline finding: PDF Generation is the one clear performance bottleneck**, 20-65x slower than every other flow measured, all of which complete in under 2 seconds. This quantifies what was already suspected from AC5 and the report-lifecycle suite's own generous timeouts (up to 180s per PDF test) - not a new discovery of a problem, but the first real measurement of its actual magnitude. Full detail in `specs/planner.md` §17. New tests: `tests/fapa-test/performance/038`-`042` (5 tests, all passing).
 
+**Follow-up finding, same day: Reports Consult's GOOD rating is a "typical," not "guaranteed," number.** Across this cycle's several full-suite runs, `041`'s own "report is being generated" assertion (and the equivalent in multiple report-lifecycle files) timed out outright at least twice after the account had been under sustained continuous load - always clean on an immediate isolated re-run. See Issue 19 in `exploratory-findings.md` and the tail-latency note in `specs/planner.md` §17.
+
 ---
 
 ## 4. Defects Log
