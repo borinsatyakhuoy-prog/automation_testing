@@ -165,7 +165,7 @@ Reviewed all 10 of `fapa_testing`'s per-category upload specs (`001`-`010_upload
 - **Severity:** Medium (same family as Issue 4 — Material component click reliability)
 - **Detail:** Not every category's Import dialog shows an "Open calendar" control at all (`fapa_testing`'s own scripts already differed on this per category), and where it is present, clicking it occasionally hung in the same way the "Rows per page" dropdown did (Issue 4) rather than opening. The ported suite now treats the whole calendar interaction as optional and time-boxed (a few seconds per step, `Escape` to recover if a selection doesn't complete) rather than a hard requirement — the current month appears to be pre-selected regardless, matching what several categories' original scripts already assumed by skipping the calendar entirely.
 
-### New Issue 11 — Numeric values are sometimes rounded in the generated PDF
+### New Issue 11 — Numeric values are sometimes rounded in the generated PDF(allowed and agreed by dev)
 - **Severity:** Low (already known; the reference project had already worked around it for some categories)
 - **Detail:** The Works of Art report showed `334568.5` (from the source Excel) as a rounded integer in the PDF. The generic content-check engine (`verifyPdfContainsColumnValues`) now includes a rounding fallback for any expected value that parses as a number, matching the same accommodation `fapa_testing` had already built for other categories (e.g. portfolio prices).
 
