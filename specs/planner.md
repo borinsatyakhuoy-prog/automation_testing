@@ -575,3 +575,26 @@ Investigated by request: how does the app behave when a request genuinely fails 
 - A mocked 500 produces no download at all and no visible error message of any kind - the ISIN table just sits there as if Export was never clicked, identical to the Clients-list and Upload-import findings above.
 
 **Summary - is the message duplicated across error types?** Answering the original question directly: **yes, for 4 of the 5 flows checked** (Login, Clients list, Upload Import, Markets Export), every distinct HTTP error class (client errors, server errors, and even a hard connection failure) produces either the exact same message as every other error class (Login, Clients list) or no message at all (Import, Export) - there is no way for a user to distinguish "the server is temporarily down" from "you made a mistake" or "nothing happened." The one exception is Reports Consult (§16.3), which shows one clear, shared-but-honest "try again later" message for genuine server errors, kept distinct from its own business-logic no-data message - proving the app is capable of better error handling when it chooses to implement it.
+
+### 17. Performance - Page-Load and API Timing Across Key Flows (2026-07-21 investigation)
+
+By request, measured how fast each key flow actually is, using the browser's own Navigation Timing Level 2 / Paint Timing / Resource Timing APIs (real numbers from real page loads, not a synthetic external probe) plus wall-clock timing of user-facing actions (e.g. click-to-visible). Each metric is rated **GOOD / SLOW / POOR** against generous, UX-heuristic thresholds (not a formal SLA) - the goal is a readable signal, not a strict gate that would be flaky against this environment's already-documented variability. `tests/fapa-test/helpers/performance.ts` provides the shared `getNavigationMetrics`, `getResourceDurations`, and `rate`/`ratedLine` helpers.
+
+**Seed:** none (read-only measurements; PDF generation uses the existing dedicated "QA Automation Client")
+
+| Flow | File | Measurement | Rating |
+|---|---|---|---|
+| Login - page load | `tests/fapa-test/performance/038_login-page-performance.spec.ts` | 894 ms (goto → `load` event) | GOOD |
+| Login - click-to-`/dashboard` round trip | same | 646 ms | GOOD |
+| Login - `POST /api/entrance/login` | same | 255 ms | GOOD |
+| Dashboard - full load | `tests/fapa-test/performance/039_dashboard-performance.spec.ts` | 519 ms | GOOD |
+| Dashboard - `GET /api/me` / `GET /api/config` | same | 17 ms / 14 ms | GOOD |
+| Clients list - click-to-controls-visible | `tests/fapa-test/performance/040_clients-list-performance.spec.ts` | 514 ms | GOOD |
+| Clients list - `GET /api/client` | same | 67 ms | GOOD |
+| Reports Consult - click-to-"generating" state | `tests/fapa-test/performance/041_reports-consult-performance.spec.ts` | 1,775 ms | GOOD |
+| Reports Consult - `GET /api/report/{client}/` | same | 21 ms | GOOD |
+| **PDF Generation - click-to-completion** | `tests/fapa-test/performance/042_pdf-generation-performance.spec.ts` | **35,645 ms (35.6s)** | **SLOW** |
+
+**Headline finding: PDF Generation is the one clear bottleneck in the app** - roughly 20-65x slower than every other measured flow, all of which load in under 2 seconds. This is consistent with (and now quantifies) what report-lifecycle's own tests already budget for (up to 180s per PDF-generation test) and what AC5 already documents ("PDF generated successfully" isn't always reliably shown within a short window under real load). Not yet determined whether this is inherent to server-side PDF rendering/composition work or has room for optimization - would need a backend-side trace to say more, which is out of scope for a browser-side Playwright measurement.
+
+Every other flow checked - Login, Dashboard, Clients list, and Reports Consult (both the page action and its underlying API call) - rates GOOD, generally completing in under 2 seconds end-to-end with API calls themselves typically under 100ms. There is no evidence of a broader systemic slowness; the bottleneck is specific to PDF generation.
