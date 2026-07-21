@@ -447,3 +447,43 @@ The report toolbar (visible after Consult, alongside refresh/PDF/settings/list i
     - expect: The application redirects the user to the /login page
   2. Attempt to navigate directly to a protected route such as /dashboard
     - expect: The application redirects back to /login rather than showing protected content, confirming the session was ended
+
+### 14. Client Portal (Client-role login, discovered 2026-07-21)
+
+Investigated live per user request: clients are not merely CRM records in this app — each client has their own login, entirely separate from the advisor/admin account, reached via the same `/login` form (no role selector; the backend just returns a different, much more restricted app for a client identity).
+
+**Seed:** Reset a target client's password first via Clients > (row) more_vert > "Reset password" while logged in as an advisor (see §8 for the Clients table), since a client's initial/actual password is not otherwise known or discoverable through the UI.
+
+#### 14.1. Advisor can reset a client's login password
+
+**File:** not yet automated
+
+**Steps:**
+  1. Locate a client's row in the Clients table (search matches First Name/Last Name/Company/Email as separate fields, not a concatenated full-name string — e.g. searching "QA Automation Client" as one phrase returns "Search not found", but "QA" or "Automation" alone matches)
+    - expect: The row shows the client's First Name, Last Name, Company Name, Email, Phone Number, Status
+  2. Click the row's kebab (more_vert) menu and choose "Reset password"
+    - expect: A "Reset Password" dialog opens showing the client's name, "New password"/"Re-type new password" fields, and a live 5-rule password checklist (8+ characters, 1 lowercase, 1 uppercase, 1 number, 1 special character), each rule showing a filled check_circle once satisfied
+  3. Enter a value satisfying all 5 rules in both fields and click "Reset & Notify Client"
+    - expect: A second "Confirm Password Reset" dialog appears, warning that the system will email the client and that the advisor must relay the new password via SMS separately; clicking "Confirm" closes both dialogs with no error and returns to the Clients table
+  4. (Cancel path) At either dialog, click Cancel/close instead
+    - expect: No password change is applied
+
+#### 14.2. Client portal: distinct restricted dashboard after login
+
+**File:** not yet automated
+
+**Steps:**
+  1. Sign out of the advisor session and log in at `/login` using the client's email and the password set in §14.1
+    - expect: Login succeeds ("LogIn successful, welcome" toast) and lands on `/dashboard` showing "Welcome, <CLIENT NAME>" with a wave emoji
+  2. Inspect the top navigation
+    - expect: Only "Dashboard" and "Reports" are present — no Admins, Clients, Markets, or Upload — confirming a distinct, restricted client role rather than a filtered advisor view
+  3. Inspect the Dashboard content
+    - expect: The same three widget shapes as the advisor Dashboard (Allocation excluding liabilities, Allocation by depository bank excluding liabilities, PDFs available for download) render as greyed-out/placeholder donut charts with static sample legend values, each captioned "No data available at the moment." (or "No report is available at the moment." for the PDF widget) when the client has no advisor-published data — i.e. this client's real portfolio/report data (imported and consulted throughout this project's report-lifecycle suite) is **not** visible here, implying client-visible data requires an explicit advisor-side publish/share step distinct from Consult
+  4. Click "Reports" in the client nav
+    - expect: A "No report is available at the moment." message, consistent with the Dashboard's PDF widget
+  5. Open the client's own account menu (avatar with initials, top-right)
+    - expect: Same two options as the advisor menu, "Setting & Privacy" and "Sign Out"; "Setting & Privacy" opens `/settings/change_password`, a self-service version of the same Reset Password UI/copy from §14.1 (still labeled "Reset & Notify Client" even for self-service — a pre-existing copy quirk also present on the advisor's own change-password page, §13.1)
+  6. Click "Sign Out"
+    - expect: Redirects to `/login`; logging back in as the advisor restores normal advisor access
+
+Not yet confirmed: the exact advisor-side action that makes a report/PDF visible in the client portal (candidates: the report toolbar's "Download PDF"/"Validate PDF" steps used throughout the report-lifecycle suite, or a dedicated publish action not yet located), and whether the "Reset & Notify Client" step's email actually arrives at the client's address (this project's synthetic client uses a disposable `@pertok.com` inbox — a temp-mail MCP server was added after this investigation and could verify the notification content in a follow-up).
