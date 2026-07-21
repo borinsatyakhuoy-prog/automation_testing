@@ -217,3 +217,65 @@ The full suite was re-run against `firefox` (93/93 passed, ~24.4 min) and `webki
 
 ### Markets (ISIN/Currency) - Export/Import/Edit investigation (2026-07-20)
 Explored live, real writes against newly-created records only (never existing shared rows), matching the report-lifecycle client's safety principle. Full detail in specs/planner.md §9.4 and §10.2. Headline finding: **ISIN rows with Asset Class "Indices" (e.g. "CAC" / "CAC40") are the literal source of the "Indicateurs de marchés" benchmark table shown in every generated client report** - confirmed by cross-referencing the ISIN table against PDF text extracted during the report-lifecycle work. This is genuinely global, shared-across-all-clients reference data, unlike a client's own portfolio holdings - reinforcing why this investigation only touched brand-new synthetic ISIN/Currency records ("QATEST00001" / "EURQAT", both dated 08/2026) rather than any existing row. Not yet determined whether a non-"Indices" security ever surfaces in a report at all, since none of our test data holds that specific ISIN.
+
+## Follow-up - Mail Service / Notifications investigation (2026-07-21)
+
+Full step detail in specs/planner.md §15. Two brand-new dedicated synthetic records were created solely for this investigation - client "QA Mail Test Client" and staff record "QA Mail Test Admin" - each given a fresh disposable inbox via the `temp-mail-mcp-server` MCP tool, never reusing or mutating the existing "QA Automation Client" the report-lifecycle suite depends on.
+
+| # | Test | Result | Notes |
+|---|------|--------|-------|
+| 15.1 | New client creation sends a notification email | PASS | "Bienvenue chez Family Partners !" arrived within seconds of clicking "Add & Notify"; no password included in the email |
+| 15.2 | Reset password on an existing client sends a notification email | PASS WITH CONTENT BUG | See Issue 14 below |
+| 15.3 | New admin/employee creation sends a notification email | PASS | Distinct "Bienvenue dans l'équipe !" template with an internal "ACCÈS INTERNE" badge - genuinely different from the client-facing email, not a relabeled copy |
+| 15.4 | Manual SMS/email password relay | CONFIRMED, NOT SCRIPTED | Every email's own copy states the password is relayed manually, separately - consistent with the existing §14.1 confirmation-dialog text |
+
+**Total: 3/3 email-delivery checks PASS** (1 with a content bug noted below); 004 documented only per the request that scoped this investigation.
+
+### Issue 14 - Password-reset notification email's body doesn't match its own subject
+- **Severity:** Low-Medium (content/copy defect, not a security issue - the actual password is never emailed either way)
+- **Steps to reproduce:** Clients > (row) more_vert > "Reset password" on any existing client > fill a valid new password twice > "Reset & Notify Client" > "Confirm" > check that client's inbox.
+- **Expected:** An email whose body matches its subject, "Réinitialisation du mot de passe terminée" ("Password reset complete") - i.e., copy about the password having been updated.
+- **Actual:** The email's first paragraph is the exact same "Nous avons le plaisir de vous informer qu'un compte a été créé pour vous..." ("we're pleased to inform you an account has been created for you") boilerplate used in the brand-new-account welcome email, and only a second paragraph correctly mentions the password update.
+- **Impact:** A client resetting their own password (not receiving a new account) gets a confusing, contradictory-sounding email. Low severity since no security/credential exposure is involved - purely a template/copy bug, most likely caused by concatenating the same "account created" fragment with a "password updated" fragment rather than using reset-specific copy throughout.
+
+## Follow-up - Error Handling across key flows investigation (2026-07-21)
+
+Full step detail and exact endpoints in specs/planner.md §16. Checked how 5 key flows behave when their underlying request genuinely fails (mocked via `page.route()`/`context.route()` - no real backend call ever fires, so no risk to the live account). Two false leads were caught before finalizing: an initial Login check used a guessed, wrong endpoint (looked like it "proved" duplication, but was actually just testing wrong throwaway credentials against an unmocked real call); an initial Export check used `page.route()` instead of `context.route()`, so the real backend silently served the real file instead of the mock (Export triggers a browser download, which needs context-level interception to catch reliably).
+
+| # | Flow | Result | Verdict |
+|---|------|--------|---------|
+| 16.1 | Login (`POST /api/entrance/login`) | 401/500/502/503/504 with correct credentials all show identical "Log in fail" | BUG |
+| 16.2 | Clients list (`GET /api/client`) | All 12 status codes + a hard connection abort show identical silent empty-search state | BUG |
+| 16.3 | Reports Consult (`GET /api/report/{client}/`) | 500/503 both show a clear "The server was unable to complete your request. Please try again later." message | GOOD (not a bug - included as a positive contrast) |
+| 16.4 | Upload Import (`POST /api/stock`) | 500 leaves the dialog open indefinitely, no message | BUG |
+| 16.5 | Markets Export (`GET /api/isin/export/detail`) | 500 produces no download and no message | BUG |
+
+**Total: 5/5 flows characterized; 4 confirmed as silent/duplicate-message bugs, 1 (Reports Consult) confirmed as a good, distinct, working example.**
+
+### Issue 15 - Login shows the identical failure message for a real server error as for a wrong password
+- **Severity:** Medium
+- **Steps to reproduce:** Mock `POST /api/entrance/login` to return 500 (or 401/502/503/504), then submit the login form with genuinely correct credentials.
+- **Expected:** Some indication that the failure is server-side, not credential-related.
+- **Actual:** The exact same "Log in fail" toast used for a wrong password appears, and the user is left on `/login` with no other information.
+- **Impact:** During a real outage, users are likely to assume their own credentials are wrong and may unnecessarily reset a perfectly valid password, adding load exactly when the service is already struggling.
+
+### Issue 16 - Clients list silently shows "no results" for every kind of request failure, including a dropped connection
+- **Severity:** Medium
+- **Steps to reproduce:** Mock `GET /api/client` with any of 400/401/403/404/408/409/422/429/500/502/503/504, or abort the request entirely (`route.abort('connectionrefused')`), then open the Clients list.
+- **Expected:** Some visible distinction between "no matching clients" and "the request failed."
+- **Actual:** Every case renders the identical "Search not found" / "0 of 0" empty state. The only trace is a `console.error` ("Failed to load resource...") and a generic `ERROR V2` log line, both invisible outside dev tools.
+- **Impact:** A real outage is indistinguishable from a legitimate empty result set - a user might conclude a client record doesn't exist when the app is actually just down.
+
+### Issue 17 - Upload Import dialog hangs open indefinitely with no error message on a server failure
+- **Severity:** Medium
+- **Steps to reproduce:** Mock `POST /api/stock` to return 500, fill out the Import dialog (File Type + file + comment), click the dialog's own "Import" submit button.
+- **Expected:** A visible error message and/or the dialog closing with feedback.
+- **Actual:** The dialog stays open indefinitely (confirmed still visible 3+ seconds after the click) with no toast or inline message - only a raw `console.error` is logged.
+- **Impact:** A user has no way to know their import failed, whether to wait, retry, or that anything went wrong at all.
+
+### Issue 18 - Markets Export fails completely silently on a server error
+- **Severity:** Low-Medium
+- **Steps to reproduce:** Mock `GET /api/isin/export/detail` (note: must be routed at the browser-context level, not just the page, since Export triggers a download) to return 500, then click "Export" on the ISIN tab.
+- **Expected:** Some visible error, or at minimum a failed-download indication.
+- **Actual:** No download fires and no message of any kind appears - the ISIN table just sits there as if Export was never clicked.
+- **Impact:** Same class of silent failure as Issues 16/17, lower frequency/stakes since Export is a read-only convenience action rather than a core workflow step.

@@ -21,6 +21,16 @@ export function requireReportClientName() {
   return clientName;
 }
 
+export function requireMailTestClientName() {
+  const clientName = process.env.FAPA_MAIL_TEST_CLIENT_NAME;
+  if (!clientName) {
+    throw new Error(
+      'FAPA_MAIL_TEST_CLIENT_NAME must be set in a local .env file (see .env.example) to run the mail-service notification test.'
+    );
+  }
+  return clientName;
+}
+
 export async function login(page: Page) {
   const { email, password } = requireCredentials();
   await page.goto('/login');

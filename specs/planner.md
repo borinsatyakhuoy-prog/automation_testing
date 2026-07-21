@@ -486,4 +486,92 @@ Investigated live per user request: clients are not merely CRM records in this a
   6. Click "Sign Out"
     - expect: Redirects to `/login`; logging back in as the advisor restores normal advisor access
 
-Not yet confirmed: the exact advisor-side action that makes a report/PDF visible in the client portal (candidates: the report toolbar's "Download PDF"/"Validate PDF" steps used throughout the report-lifecycle suite, or a dedicated publish action not yet located), and whether the "Reset & Notify Client" step's email actually arrives at the client's address (this project's synthetic client uses a disposable `@pertok.com` inbox — a temp-mail MCP server was added after this investigation and could verify the notification content in a follow-up).
+Not yet confirmed: the exact advisor-side action that makes a report/PDF visible in the client portal (candidates: the report toolbar's "Download PDF"/"Validate PDF" steps used throughout the report-lifecycle suite, or a dedicated publish action not yet located).
+
+### 15. Mail Service - Client & Staff Notifications (2026-07-21 investigation, real writes against two new dedicated synthetic records)
+
+Follow-up to §14's open question: whether the "Reset & Notify Client" email actually arrives. Verified live end-to-end using the `temp-mail-mcp-server` MCP tool for real, disposable inboxes - not the existing "QA Automation Client" (which the report-lifecycle suite depends on and whose original inbox credentials were never saved), but two brand-new dedicated synthetic records created solely for this investigation: client "QA Mail Test Client" and staff record "QA Mail Test Admin" (role EMPLOYE), each given its own fresh `@web-library.net` disposable address. All three emails below were sent from `phumra.chan@allweb.com.kh` via SendinBlue and arrived within seconds of the triggering action.
+
+**Seed:** none (real-write investigation against dedicated new records; see data-safety note at the top of this file)
+
+#### 15.1. New client creation sends a "Bienvenue chez Family Partners !" notification (001)
+
+**File:** not automated (one-off real write, see note below)
+
+**Steps:**
+  1. Clients > "Add client", fill required fields (First Name "QA", Excel name "QA Mail Test Client", Last Name "Mail Test Client", a disposable email address) and click "Add & Notify"
+    - expect: The client is created (table row count increments) and the dialog closes
+  2. Check the inbox for the email address just used
+    - expect: An email from `phumra.chan@allweb.com.kh`, subject "Bienvenue chez Family Partners !", arrives within seconds, with a link to `https://develop-fapa.allweb.cloud` and copy stating a personal password will follow separately by SMS (or personal email) - confirming the app never emails the password itself
+
+#### 15.2. Resetting an existing client's password sends a distinct reset-confirmation email (002) - content bug found
+
+**File:** `tests/fapa-test/notifications/032_client-reset-password-notification.spec.ts`
+
+**Steps:**
+  1. Using the client created in §15.1 (or any existing client), Clients > row kebab > "Reset password", enter a value satisfying all 5 password rules in both fields, click "Reset & Notify Client", then "Confirm" on the "Confirm Password Reset" dialog (copy: "The system will automatically send an email notification to the client. You will need to send the new password to the client manually via SMS.")
+    - expect: Both dialogs close with no error
+  2. Check the same client's inbox
+    - expect: A second, distinct email arrives, subject "Réinitialisation du mot de passe terminée" ("Password reset complete")
+
+- **Bug found:** the reset email's body does not match its own subject. It opens with the exact same "Nous avons le plaisir de vous informer qu'un compte a été créé pour vous..." ("we're pleased to inform you an account has been created for you") boilerplate used in the brand-new-account email (§15.1), before a second paragraph correctly says the password was updated. For an existing client who is not receiving a new account, the leading paragraph is simply wrong/confusing copy - looks like the reset flow's email is built by concatenating the same "account created" template fragment with a "password updated" fragment, rather than using reset-specific copy throughout.
+- Neither email contains the actual new password in any form - consistent with the in-app copy that the password must be relayed manually via SMS (or personal email) by the advisor.
+
+#### 15.3. New admin/employee creation sends a distinct internal "Bienvenue dans l'équipe !" notification (003)
+
+**File:** not automated (one-off real write, see note below)
+
+**Steps:**
+  1. Admins > Team Management > "Add user", fill required fields (First Name "QA", Last Name "Mail Test Admin", a disposable email address; Role left at its EMPLOYE default) and click "Add & Notify"
+    - expect: The user is created (table row count increments) and the dialog closes
+  2. Check the inbox for the email address just used
+    - expect: An email from the same sender arrives, subject "Bienvenue dans l'équipe !" ("Welcome to the team!") - genuinely distinct from the client-facing §15.1 email, not just a reused template: it adds an "ACCÈS INTERNE" ("INTERNAL ACCESS") badge in the header and an extra blue notice box stating the access is strictly for professional use per Family Partners' internal security policy. Same SMS/personal-email password-relay copy as §15.1/§15.2.
+
+#### 15.4. Manual SMS/email password relay is a deliberate, unscripted human step (004)
+
+Not a bug and not automatable: every one of the three emails above (and the in-app "Confirm Password Reset" dialog text already documented in §14.1) explicitly states the system never emails the password itself - an advisor/admin must relay the newly-set password to the client or new staff member manually, via SMS or a separate personal email, outside the application. This is a business-process step with no UI action to trigger or verify in-app, so per the request that scoped this investigation, it is documented here only, with no corresponding test file.
+
+**Automation note:** only §15.2 (reset password on an *existing* record) is safely repeatable - it performs a real write but doesn't create new data, matching the report-lifecycle client's re-import pattern. §15.1 and §15.3 (creating a brand-new client/admin) are one-off real writes with no in-app delete path discovered yet, so repeating them on every automated run would permanently accumulate synthetic records in this production-like environment; they are documented as manually-verified findings only, consistent with how other one-off "Discovered" investigations in this file (§9.4, §10.2, §12.4) are handled. `FAPA_MAIL_TEST_CLIENT_NAME` in `.env` points at the "QA Mail Test Client" record §15.2's automated test runs against.
+
+### 16. Error Handling - Server-Error Response Behavior Across Key Flows (2026-07-21 investigation, network-mocked, no real backend calls)
+
+Investigated by request: how does the app behave when a request genuinely fails server-side (500-range errors, 401/403, or a hard connection failure), and does it show the same message regardless of the underlying cause? All findings below use Playwright's `page.route()`/`context.route()` to fulfill a request with a fake status/body (or `route.abort()` for a true connection failure) before it ever reaches the real backend - fully safe, deterministic, and repeatable against the live account, unlike a real outage which can't be manufactured on demand. The real endpoint for each flow was confirmed live via `browser_network_requests` before mocking it (e.g. an early attempt to mock Login against a guessed `/api/auth/login` silently did nothing, because the real endpoint is `/api/entrance/login` - always confirm the real URL first, or a route that never matches will make a flow look "fine" for the wrong reason).
+
+**Seed:** none (mocked network responses only)
+
+#### 16.1. Login: every error status produces the identical "Log in fail" message as a wrong password (BUG)
+
+**File:** `tests/fapa-test/error-handling/033_login-request-failure-shows-generic-message.spec.ts`
+
+- Real endpoint: `POST /api/entrance/login`.
+- Mocked 401, 500, 502, 503, and 504 responses **with genuinely correct credentials** all produce the exact same "Log in fail" toast that a wrong password produces, and the user stays on `/login` with no other clue. A user whose password is correct has no way to tell "the server is down, try again shortly" apart from "you mistyped your password" - likely to cause unnecessary password-reset requests during a real outage.
+
+#### 16.2. Clients list: every error (including a hard connection failure) silently renders as "no results" (BUG)
+
+**File:** `tests/fapa-test/error-handling/034_clients-list-request-failure-silent.spec.ts`
+
+- Real endpoint: `GET /api/client?...`.
+- Mocked 400, 401, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504, and even a fully aborted connection (`route.abort('connectionrefused')`) all produce the exact same result: the table silently shows its normal empty-search state ("Search not found", "0 of 0"), indistinguishable from a legitimate zero-result search. The only trace of a real problem is a `console.error` reading `Failed to load resource...` plus a second, generic `ERROR V2` log line - both invisible to an actual user, developer-tools-only.
+
+#### 16.3. Reports Consult: the one flow that gets this right (positive finding)
+
+**File:** `tests/fapa-test/error-handling/035_reports-consult-request-failure-shows-message.spec.ts`
+
+- Real endpoint: `GET /api/report/{clientName}/` (fired by Consult; the client-search and available-months calls are separate endpoints, deliberately left unmocked so the client can still be selected).
+- Mocked 500 and 503 both show a clear, visible message: "The server was unable to complete your request. Please try again later." - a real, distinct, appropriately generic message, unlike Login and Clients list above. This is deliberately kept separate in the UI from the business-logic "Invalid month to generate report." message documented in §12.3 for a genuinely no-data month - the app can and does distinguish "the server broke" from "there's nothing here" for this flow, just not for the others in this section.
+
+#### 16.4. Upload Import: the dialog hangs open with no error at all on failure (BUG)
+
+**File:** `tests/fapa-test/error-handling/036_upload-import-request-failure-no-feedback.spec.ts`
+
+- Real endpoint: `POST /api/stock` (used for every upload category, not just Portfolio).
+- A mocked 500 leaves the "Import File" dialog open indefinitely (confirmed visible 3+ seconds after clicking its submit button, no toast, no inline error) - a real user would have no way to know their import failed versus the app simply being slow, and no obvious next action beyond guessing to close and retry. Only a raw `console.error` (`Failed to load resource: the server responded with a status of 500`) is logged, again invisible to an end user.
+
+#### 16.5. Markets Export: silent failure, no download and no message (BUG)
+
+**File:** `tests/fapa-test/error-handling/037_markets-export-request-failure-silent.spec.ts`
+
+- Real endpoint: `GET /api/isin/export/detail?date=YYYY-MM` (discovered via `download.url()` after a real export, since Export triggers a browser download rather than an in-page network call the initiating page necessarily sees - `context.route()` is required to intercept it reliably, not `page.route()`; the first attempt at this test used `page.route()` and the real backend served the real file anyway, silently defeating the mock).
+- A mocked 500 produces no download at all and no visible error message of any kind - the ISIN table just sits there as if Export was never clicked, identical to the Clients-list and Upload-import findings above.
+
+**Summary - is the message duplicated across error types?** Answering the original question directly: **yes, for 4 of the 5 flows checked** (Login, Clients list, Upload Import, Markets Export), every distinct HTTP error class (client errors, server errors, and even a hard connection failure) produces either the exact same message as every other error class (Login, Clients list) or no message at all (Import, Export) - there is no way for a user to distinguish "the server is temporarily down" from "you made a mistake" or "nothing happened." The one exception is Reports Consult (§16.3), which shows one clear, shared-but-honest "try again later" message for genuine server errors, kept distinct from its own business-logic no-data message - proving the app is capable of better error handling when it chooses to implement it.
