@@ -16,11 +16,20 @@ test.describe('Performance - Reports Consult', () => {
     await expect(page.getByText(/report is being generated/i)).toBeVisible({ timeout: 20_000 });
     const consultToProgressMs = Date.now() - consultStart;
 
+    // The progress state appearing is not the same as Consult being done -
+    // the report only actually renders once this message goes away. Measure
+    // through to that point too, since that's the real user-facing
+    // completion of "Consult" (see REPORT_CONSULT_RENDERED in helpers/performance.ts).
+    await expect(page.getByText(/report is being generated/i)).toBeHidden({ timeout: 75_000 });
+    const consultToRenderedMs = Date.now() - consultStart;
+
     const reportDurations = await getResourceDurations(page, '/api/report/');
 
     const summary = [
       ratedLine('Consult click to "report is being generated" progress state', consultToProgressMs, 2000, 6000),
       assertSLA('SLA T6 - Consult click to "report is being generated"', consultToProgressMs, SLA.REPORT_CONSULT),
+      ratedLine('Consult click to report actually rendered (the real "Consult" completion)', consultToRenderedMs, 35000, 60000),
+      assertSLA('SLA T6b - Consult click to report rendered', consultToRenderedMs, SLA.REPORT_CONSULT_RENDERED),
       reportDurations[0] !== undefined
         ? ratedLine(`GET /api/report/${clientName}/ duration`, reportDurations[0], 800, 2500)
         : `GET /api/report/${clientName}/ duration: n/a`,

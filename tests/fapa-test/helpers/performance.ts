@@ -96,8 +96,20 @@ export const SLA = {
   SEARCH_FILTER: { target: 1_500, max: 5_000 },
   /** T5: opening a dialog/wizard (Add Client, Add Currency, Import File, etc.). */
   DIALOG_OPEN: { target: 1_000, max: 4_000 },
-  /** T6: Reports Consult - click to the async "report is being generated" state. */
+  /** T6: Reports Consult - click to the async "report is being generated" state appearing. Kept as a sub-metric only - see REPORT_CONSULT_RENDERED for the actual user-facing completion. */
   REPORT_CONSULT: { target: 3_000, max: 10_000 },
+  /**
+   * T6b: Reports Consult - click all the way through to the report actually
+   * rendering (progress bar gone, data visible), not just the progress bar
+   * appearing. This is the real "Consult" user experience and the metric
+   * that should be reported as "Consult" - the T6 click-to-progress-bar
+   * number above was being read as the whole Consult duration, which
+   * understated it by roughly 10x (baseline ~1.6-2.6s vs. this tier's own
+   * baseline of ~20-25.5s across 12 back-to-back isolated runs, avg ~23.6s -
+   * see specs/performance-sla.md). target/max set with the same margin
+   * methodology as PDF_GENERATION (~1.5x / ~3x the observed baseline).
+   */
+  REPORT_CONSULT_RENDERED: { target: 35_000, max: 75_000 },
   /** T7: PDF generation - the heaviest real operation in the app by a wide margin. */
   PDF_GENERATION: { target: 60_000, max: 120_000 },
   /** T8: a download-triggering action (Export, report Download) - click to the browser `download` event firing. */

@@ -25,6 +25,13 @@ test.describe('Performance - Report Lifecycle (main feature SLA gate)', () => {
     await expect(page.getByText(/report is being generated/i)).toBeVisible({ timeout: 20_000 });
     const consultMs = Date.now() - consultStart;
 
+    // consultMs above only covers click -> progress bar appearing, not the
+    // report actually rendering - that wait was previously absorbed silently
+    // into waitForLoadState('networkidle') with no timing, making it
+    // invisible in every report (see 042_pdf-generation-performance.spec.ts's
+    // matching fix and specs/performance-sla.md T6b).
+    await expect(page.getByText(/report is being generated/i)).toBeHidden({ timeout: 75_000 });
+    const consultToRenderedMs = Date.now() - consultStart;
     await page.waitForLoadState('networkidle');
 
     const generateStart = Date.now();
@@ -56,8 +63,10 @@ test.describe('Performance - Report Lifecycle (main feature SLA gate)', () => {
 
     const summary = [
       assertSLA('SLA T6 - Report Lifecycle: Consult to "being generated"', consultMs, SLA.REPORT_CONSULT),
+      assertSLA('SLA T6b - Report Lifecycle: Consult to report rendered', consultToRenderedMs, SLA.REPORT_CONSULT_RENDERED),
       assertSLA('SLA T7 - Report Lifecycle: Generate PDF to completion', generateMs, SLA.PDF_GENERATION),
       assertSLA('SLA T8 - Report Lifecycle: Download click to download event', downloadMs, SLA.DOWNLOAD_ACTION),
+      `TOTAL: Consult click to PDF completion (real end-to-end wait): ${consultToRenderedMs + generateMs} ms`,
       `Success toast observed directly: ${sawToast} (this environment sometimes misses it under load even on real success - see specs/planner.md AC5)`,
     ];
     console.log(`\n[PERF] Report Lifecycle (main feature):\n  ${summary.join('\n  ')}`);
