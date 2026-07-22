@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { login, requireReportClientName } from '../helpers/auth';
 import { consultReport } from '../helpers/reports';
-import { attachMetrics, ratedLine } from '../helpers/performance';
+import { attachMetrics, ratedLine, assertSLA, SLA } from '../helpers/performance';
 
 // PDF generation is the slowest real operation in this app by a wide margin
 // (report-lifecycle's own tests already budget up to 180s for it) - this is
@@ -31,11 +31,10 @@ test.describe('Performance - PDF Generation', () => {
 
     const summary = [
       ratedLine('Generate PDF click to completion', generateMs, 15_000, 45_000),
+      assertSLA('SLA T7 - Generate PDF click to completion', generateMs, SLA.PDF_GENERATION),
       `Success toast observed directly: ${sawToast} (this environment sometimes misses it under load even on real success - see specs/planner.md AC5)`,
     ];
     console.log(`\n[PERF] PDF Generation:\n  ${summary.join('\n  ')}`);
     await attachMetrics(testInfo, 'pdf-generation-performance-metrics', summary);
-
-    expect(generateMs).toBeLessThan(150_000);
   });
 });

@@ -16,13 +16,6 @@ patrimoine") per client per month. Generated reports can be validated
 (marked as reviewed) and downloaded, and their content should accurately
 reflect whatever portfolio data was most recently imported for that client.
 
-Note: this story previously described an "e-commerce checkout" scope that
-does not exist in the live application — that description has been
-replaced with the above, grounded in direct exploration of
-develop-fapa.allweb.cloud (see specs/planner.md and
-test-results/exploratory-findings.md) and in review of a companion
-automation project (fapa_testing) that already exercises the Upload →
-Report → PDF validation lifecycle in depth.
 
 ## Application URL
 https://develop-fapa.allweb.cloud/login

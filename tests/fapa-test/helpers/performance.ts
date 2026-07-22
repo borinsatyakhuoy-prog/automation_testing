@@ -1,4 +1,4 @@
-import { Page, TestInfo } from '@playwright/test';
+import { Page, TestInfo, expect } from '@playwright/test';
 
 export interface NavigationMetrics {
   ttfb: number;
@@ -71,4 +71,58 @@ export function rate(ms: number, goodMax: number, slowMax: number): Rating {
 /** Formats one metric line with its rating, e.g. "Login round trip: 812 ms  [GOOD]". */
 export function ratedLine(label: string, ms: number, goodMax: number, slowMax: number): string {
   return `${label}: ${ms} ms  [${rate(ms, goodMax, slowMax)}]`;
+}
+
+/**
+ * Formal performance SLA, per operation class. Unlike `rate()` above (a
+ * readable heuristic signal only), every tier here has a hard `max` that a
+ * test MUST fail against via `assertSLA()` - this is a real gate, not just a
+ * label. `target` is the expected/healthy figure; a result between `target`
+ * and `max` is a WARN (within SLA but degraded, worth watching), not a
+ * failure. Values are calibrated from this project's own real baseline
+ * measurements (specs/planner.md §17) with a deliberate margin so the SLA
+ * catches genuine regressions without being flaky against this shared,
+ * documented-as-variable live "develop" environment - see
+ * specs/performance-sla.md for the full rationale per tier.
+ */
+export const SLA = {
+  /** T1: full page load (goto -> load event) for an unauthenticated/initial page. */
+  PAGE_LOAD: { target: 2_000, max: 8_000 },
+  /** T2: in-app navigation - click a nav/tab control to its section's content visible. */
+  NAVIGATION: { target: 2_000, max: 6_000 },
+  /** T3: a single read (GET) API call - list, detail, or config fetch. */
+  API_READ: { target: 800, max: 3_000 },
+  /** T4: search/filter - typing/selecting a filter to the filtered result rendering. */
+  SEARCH_FILTER: { target: 1_500, max: 5_000 },
+  /** T5: opening a dialog/wizard (Add Client, Add Currency, Import File, etc.). */
+  DIALOG_OPEN: { target: 1_000, max: 4_000 },
+  /** T6: Reports Consult - click to the async "report is being generated" state. */
+  REPORT_CONSULT: { target: 3_000, max: 10_000 },
+  /** T7: PDF generation - the heaviest real operation in the app by a wide margin. */
+  PDF_GENERATION: { target: 60_000, max: 120_000 },
+} as const;
+
+export type SlaTier = (typeof SLA)[keyof typeof SLA];
+
+export type SlaVerdict = 'PASS' | 'WARN' | 'FAIL';
+
+/** Rates a duration against a formal SLA tier: PASS (<= target), WARN (<= max), FAIL (> max). */
+export function rateSla(ms: number, tier: SlaTier): SlaVerdict {
+  if (ms <= tier.target) return 'PASS';
+  if (ms <= tier.max) return 'WARN';
+  return 'FAIL';
+}
+
+/**
+ * Hard SLA gate: fails the test if `ms` exceeds `tier.max`. Returns a
+ * formatted line (for attaching/logging) reporting PASS/WARN/FAIL against
+ * both the target and the max, regardless of outcome.
+ */
+export function assertSLA(label: string, ms: number, tier: SlaTier): string {
+  const verdict = rateSla(ms, tier);
+  const line = `${label}: ${ms} ms  [SLA ${verdict} - target ${tier.target} ms / max ${tier.max} ms]`;
+  expect(ms, `${label} exceeded the formal SLA max of ${tier.max} ms (measured ${ms} ms)`).toBeLessThanOrEqual(
+    tier.max
+  );
+  return line;
 }
