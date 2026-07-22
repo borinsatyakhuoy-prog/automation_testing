@@ -183,6 +183,18 @@ Also added 8 more performance tests to close remaining gaps, plus a Download-tim
 
 New tests: `tests/fapa-test/performance/056`-`063` (Markets Export real-download timing, Clients search filter, Admins Team Management search filter, Sign Out, Language toggle EN↔FR, Add Client dialog open, Add User dialog open, ISIN Edit dialog open) - all passing. 3 WARN-tier results (ISIN search 2,029 ms, Markets Export 5,026 ms, ISIN Edit dialog 1,533 ms), none breaching their SLA max. Full per-flow table in `specs/planner.md` §17.
 
+### 3h. Cycle 4, verification pass (2026-07-22): re-checking the three WARN readings
+
+By request, re-ran `048_markets-isin-performance`, `056_markets-export-performance`, and `063_isin-edit-dialog-performance` in isolation to determine whether each WARN was transient noise or a real, reproducible characteristic - the same isolate-and-recheck method this project has used throughout (§3a, §3e) to tell the two apart.
+
+| Test | In full 26-test suite | Isolated (2 runs) | Verdict |
+|---|---|---|---|
+| ISIN search | 2,029 ms / 2,155 ms (WARN) | 30 ms / 31 ms (PASS) | **Noise, not signal.** The search itself is near-instant; the WARN was this environment's already-documented tail latency under sustained session load (Issue 19) surfacing on a search interaction for the first time, not a real slowdown. |
+| Markets Export | 5,026 ms (WARN) | 3,034 ms (WARN) | **Real, reproducible.** Both land in the 3-5s band regardless of suite position - a genuine characteristic of a real ~2,438-row xlsx export + download, comfortably within its 10,000 ms max both times. |
+| ISIN Edit dialog | 1,533 ms (WARN) | 1,502 ms (WARN) | **Real, reproducible.** Consistently ~1.5s vs. under 500 ms for the blank Add-dialogs elsewhere (Add User 192 ms, Add Currency 119-160 ms) - Edit has to fetch and pre-fill the row's existing values first, a structural reason for the gap, not a bug. |
+
+**No SLA threshold changes made.** Markets Export and the ISIN Edit dialog stay WARN by design - loosening their targets to make the WARN disappear would reduce the signal's value for catching a genuine future regression on those two specific flows. Only the ISIN search reading is now understood to have been noise rather than a real characteristic.
+
 ---
 
 ## 4. Defects Log
