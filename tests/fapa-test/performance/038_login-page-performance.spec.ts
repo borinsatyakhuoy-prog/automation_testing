@@ -22,7 +22,11 @@ test.describe('Performance - Login', () => {
 
     const loginStart = Date.now();
     await page.getByRole('button', { name: 'Log in' }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    // Use a timeout comfortably above SLA.NAVIGATION.max so a slow-but-real
+    // login is measured and judged by assertSLA() below, rather than
+    // false-failing on the default 5s expect timeout while still genuinely
+    // in-flight (observed live - see the SLA T2 note in specs/planner.md §17).
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
     const loginRoundTripMs = Date.now() - loginStart;
     const loginApiDurations = await getResourceDurations(page, '/api/entrance/login');
 

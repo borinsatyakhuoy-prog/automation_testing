@@ -40,17 +40,24 @@ test.describe('Performance - Report Lifecycle (main feature SLA gate)', () => {
     }
     const generateMs = Date.now() - generateStart;
 
-    // Also confirm the lifecycle's downstream actions (list/menu open) remain
-    // reachable post-generation - not separately timed/SLA-gated, since
-    // helpers/reports.ts's own clickWithRetry already accounts for this
-    // project's documented Material-component click flakiness (Issue 4/7).
+    // Also time the Download action - the lifecycle's remaining real
+    // operation not yet SLA-gated (list/menu open uses helpers/reports.ts's
+    // clickWithRetry, which already accounts for this project's documented
+    // Material-component click flakiness - Issue 4/7 - so isn't separately
+    // timed here).
     await openMonthReportsList(page);
     await openMonthReportActionsMenu(page);
-    await page.keyboard.press('Escape');
+
+    const downloadStart = Date.now();
+    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+    await page.getByRole('menuitem', { name: 'Download' }).click();
+    await downloadPromise;
+    const downloadMs = Date.now() - downloadStart;
 
     const summary = [
       assertSLA('SLA T6 - Report Lifecycle: Consult to "being generated"', consultMs, SLA.REPORT_CONSULT),
       assertSLA('SLA T7 - Report Lifecycle: Generate PDF to completion', generateMs, SLA.PDF_GENERATION),
+      assertSLA('SLA T8 - Report Lifecycle: Download click to download event', downloadMs, SLA.DOWNLOAD_ACTION),
       `Success toast observed directly: ${sawToast} (this environment sometimes misses it under load even on real success - see specs/planner.md AC5)`,
     ];
     console.log(`\n[PERF] Report Lifecycle (main feature):\n  ${summary.join('\n  ')}`);

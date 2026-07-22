@@ -100,6 +100,8 @@ export const SLA = {
   REPORT_CONSULT: { target: 3_000, max: 10_000 },
   /** T7: PDF generation - the heaviest real operation in the app by a wide margin. */
   PDF_GENERATION: { target: 60_000, max: 120_000 },
+  /** T8: a download-triggering action (Export, report Download) - click to the browser `download` event firing. */
+  DOWNLOAD_ACTION: { target: 3_000, max: 10_000 },
 } as const;
 
 export type SlaTier = (typeof SLA)[keyof typeof SLA];

@@ -37,5 +37,10 @@ export async function login(page: Page) {
   await page.getByRole('textbox', { name: 'Enter your email' }).fill(email);
   await page.getByRole('textbox', { name: 'Enter your password' }).fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  // This environment has documented tail-latency variance under load (see
+  // Issue 19 / test-results/exploratory-findings.md) - the default 5s expect
+  // timeout has been observed to fire while login is still genuinely
+  // in-flight (no error shown, button still disabled), not actually failed.
+  // A generous explicit timeout avoids a false failure on a slow-but-real login.
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
 }
