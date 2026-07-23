@@ -115,6 +115,52 @@ Export in `specs/planner.md` §17. Also unlike Currency, switching ISIN ↔
 Currency tabs does **not** re-fetch `/api/isin` (Angular keeps the tab's
 component alive) - only a full nav-away-and-back (e.g. via Dashboard)
 triggers a fresh fetch, which is the cycle `066` uses for its 15 samples.
+Re-verified with 4 additional isolated runs the same day specifically to
+answer "how often does this actually breach the SLA" - see Overall
+Conclusion below for the full tally (5 of 6 runs exceeded the 3,000 ms max).
+
+## Report generation architecture: what a single Consult actually does
+
+Live Resource Timing capture of one real Consult (Dashboard → Reports →
+select client → Consult), read via
+`performance.getEntriesByType('resource')` with full timing fields
+(`startTime`, `fetchStart`, `requestStart`, `responseStart`, `responseEnd`),
+found the click fires **22 separate `/api/report/*` calls**, six of which
+were not previously catalogued anywhere in this suite:
+
+| Endpoint | Purpose (inferred) |
+|---|---|
+| `GET /api/report/client?search={query}` | Client-name autocomplete on the Reports search page (distinct from `/api/client?search=` used by the Clients list) |
+| `GET /api/report/client/{name}/months` | Which months have report data for this client |
+| `GET /api/report/{client}/{month}` | The report metadata fetch (the one `041`/`055` already measure, at a slightly more specific path than previously assumed) |
+| `GET /api/report/pdf?client={client}&month={month}` | Fired alongside the metadata fetch - likely kicks off/checks PDF availability |
+| `GET /api/report/{reportId}` | Fetch by the report's generated UUID, once one exists |
+| `GET /api/report/{reportId}/sections/{sectionHash}` | **Fired 14 times in this one Consult** - the report is composed of ~14 independently-fetched sections (charts/tables), not one monolithic payload |
+
+**Every one of these 22 calls completed in 20-300 ms**, and the 14 section
+calls in particular all landed within a **~315 ms window of each other**
+(effectively parallel, not sequential) - so the section-fetch step itself is
+fast and well-architected. **Zero queuing**: `fetchStart - startTime`
+(Resource Timing's own measure of time spent waiting for a free connection)
+was **0 ms on all 22 calls**, meaning the browser never queued a request
+behind connection limits - ruling out client-side/network contention as a
+cause of Consult's overall duration.
+
+**So where does the ~20-30s actually go?** Not inside any measured HTTP
+call - in **three large idle gaps between completed calls**: ~8.0s before
+the `/months` lookup, ~8.7s before the metadata fetch, and ~15.3s before the
+final fetch-by-UUID. No repeated/polling requests and no WebSocket or SSE
+connection were observed during any of these gaps (checked directly via
+`initiatorType`/`resource` entries - none found). **Answering the direct
+question of "is there queuing latency": there is no browser-side or
+network-level queuing anywhere in this flow.** The gaps almost certainly
+reflect a server-side async job (report assembly/rendering) that the client
+is waiting on via some mechanism this browser-based suite cannot observe
+(no visible poll, no visible push) - quantifying that job's internal
+queue/processing time split would require backend-side tracing or APM, not
+something achievable from Playwright/Resource Timing. What this investigation
+*does* rule out with confidence: slow individual queries, connection
+contention, and client-side rendering blocking on network.
 
 ## Coverage
 
@@ -292,28 +338,48 @@ already-flagged risk area.**
   10,327 / max 12,389 ms) against a 60,000 ms target / 120,000 ms max - both
   comfortably inside target, not just under max, across every one of their
   samples.
-- **The one real finding, and it's more than a WARN: `/api/isin`'s 2,438-row
-  (~614 KB) unpaginated payload sits right at the edge of the generic API
-  Read SLA ceiling, and has now been observed to cross it.** Two independent
-  runs measured P99 = 2,673 ms and P99 = 3,203 ms - the second **exceeded**
-  the 3,000 ms hard max and correctly failed `066`'s P99 gate. This is a
-  genuine, structural characteristic (a real, unpaginated 2,438-row JSON
-  payload, not test flakiness or a bug in the test) - the same category of
-  finding as Markets Export and the ISIN Edit dialog in the 2026-07-22 WARN
-  verification pass, except this one has now demonstrated it can actually
-  breach its ceiling, not just approach it. **Recommendation:** either (a)
-  paginate `/api/isin` the way `/api/client` and `/api/user` already are -
-  the root-cause fix, since an unpaginated multi-thousand-row response is
-  the actual reason this is slow, or (b) if pagination isn't near-term
-  feasible, give this endpoint its own SLA tier with a higher ceiling
-  (mirroring how Report Consult got its own T6/T6b tiers instead of being
-  squeezed into a generic one) rather than leaving it measured against a
-  ceiling calibrated for sub-100-row responses. Not a decision to make
-  unilaterally in this test suite - flagged here for the product/eng team.
+- **UPDATE (re-verified with 4 additional runs): `/api/isin` is not an
+  occasional WARN - it fails its formal SLA ceiling most of the time.**
+  Six independent P99 runs today measured **2,673 / 3,203 / 3,403 / 3,062 /
+  3,636 / 3,700 ms** - **5 of 6 (83%) exceeded the 3,000 ms hard max**, and
+  the one that didn't (2,673 ms) still blew past the 800 ms target. The
+  values cluster consistently in a 2.7-3.7s band with no sign of settling
+  lower - this is the endpoint's *normal* behavior, not a rare tail event.
+  Root cause, confirmed via the live `/api/isin?month=2026-07` response: a
+  single unpaginated **2,438-row / ~614 KB** JSON payload (matching the row
+  count already cited for Markets Export). **This is the single clearest,
+  most reproducible performance finding in this entire suite - escalate
+  accordingly, not a "worth watching" item.** **Recommendation** (unchanged
+  from the first pass, now with much stronger evidence behind it): paginate
+  `/api/isin` the way `/api/client` and `/api/user` already are - the
+  root-cause fix - or, if that's not near-term feasible, give this endpoint
+  its own SLA tier with a higher ceiling (mirroring T6/T6b for Report
+  Consult) rather than measuring it against a ceiling calibrated for
+  sub-100-row responses. Still a product/eng decision, not one to make
+  unilaterally in this test suite.
 - **The `/api/currency-detail` ("Devise") endpoint is fast and consistent
   regardless of how far back the queried month is** - P99 125 ms across
   periods spanning 2003-2026, no evidence that older/less-recent data is
   slower to query.
+- **Report Consult root-cause investigation: the delay is not slow API
+  calls, and there is zero network/browser-side queuing.** A full Resource
+  Timing capture of one live Consult (22 `/api/report/*` calls, including
+  6 endpoints not previously catalogued - see Coverage below) showed every
+  individual call completing in 20-300 ms, with `fetchStart - startTime`
+  (the browser's own connection-queuing metric) equal to **zero on every
+  single call** - the browser never queued a request waiting for a free
+  connection. Instead, the ~20-30s Consult duration is concentrated in
+  **three large idle gaps between completed calls** (~8.0s, ~8.7s, ~15.3s),
+  during which no further network activity - no repeated polling, no
+  WebSocket/SSE connection - was observed. In plain terms: **there is no
+  measurable "queuing latency" on the network/browser side**; the true
+  server-side cost (an async report-generation job, most likely) happens in
+  a way this browser-based suite cannot see or measure further - that would
+  require backend-side tracing/APM, not something Playwright can add. What
+  this suite *can* now say with confidence is what it's **not**: not slow
+  queries, not connection contention, not client-side rendering blocking on
+  network (the section fetches themselves were fast and effectively
+  parallel, arriving within a ~315ms window).
 - **The one open risk, unchanged from previous findings: Reports Consult
   has a real, reproducible tail-latency failure mode under sustained
   same-account repetition within a short window**, occurring in roughly 1
@@ -323,8 +389,11 @@ already-flagged risk area.**
   but not root-cause from the browser side - flagged for backend
   investigation, not treated as "the system is broken."
 
-**Bottom line:** for a single user doing normal work, this app is fast and
-reliable across every measured flow. The one thing worth taking to the
-backend team is Consult's tail-latency behavior under repeated/sustained
-use - it's real, it's reproducible, and it's the only flow in this entire
-suite that has ever failed to complete within its own generous SLA window.
+**Bottom line, updated:** for a single user doing normal work, most of the
+app remains fast and reliable. Two things are worth taking to the backend
+team, in priority order: **(1) `/api/isin` - confirmed, frequent (5/6 runs
+today), root-caused to an unpaginated 2,438-row payload, with a known
+standard fix (pagination)** - this is now the single most actionable finding
+in the entire suite; and **(2) Consult's tail-latency stall under
+repeated/sustained use** - real and reproducible, but its exact server-side
+cause is outside what browser-based measurement can determine.
