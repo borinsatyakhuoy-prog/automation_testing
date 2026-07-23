@@ -12,6 +12,10 @@ test.describe('Performance - Markets Currency', () => {
     await expect(page.getByRole('button', { name: 'Add Currency' })).toBeVisible();
     const tabMs = Date.now() - tabStart;
 
+    // Settling before reading Resource Timing avoids the race found in
+    // 064's pagination test (fetch not yet appended when "Add Currency" renders).
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     const currencyDetailDurations = await getResourceDurations(page, '/api/currency-detail');
 
     const dialogStart = Date.now();

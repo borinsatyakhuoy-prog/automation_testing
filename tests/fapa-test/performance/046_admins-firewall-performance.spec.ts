@@ -12,6 +12,10 @@ test.describe('Performance - Admins Firewall Configuration', () => {
     await expect(page.getByRole('button', { name: 'Add Range' })).toBeVisible();
     const clickToVisibleMs = Date.now() - start;
 
+    // Settling before reading Resource Timing avoids the race found in
+    // 064's pagination test (fetch not yet appended when "Add Range" renders).
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     const ipWhiteListDurations = await getResourceDurations(page, '/api/ip-white-list');
 
     const summary = [

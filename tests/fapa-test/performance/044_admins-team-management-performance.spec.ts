@@ -11,6 +11,12 @@ test.describe('Performance - Admins Team Management', () => {
     await expect(page.getByRole('columnheader', { name: 'First Name' })).toBeVisible();
     const clickToVisibleMs = Date.now() - start;
 
+    // The column header rendering doesn't guarantee the Resource Timing
+    // entry for the underlying fetch has been appended yet - the same race
+    // found and fixed in 064's pagination test. Settling here (after the T2
+    // measurement, so it doesn't pollute it) makes the capture reliable.
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     const userListDurations = await getResourceDurations(page, '/api/user');
 
     const summary = [

@@ -510,3 +510,51 @@ sources rather than one monolithic query - consistent with that
 investigation's finding that every individual call was fast and the real
 cost sits in the gaps between them, not in any of these queries
 themselves.
+
+## "n/a" audit (2026-07-23): every remaining T3 gap, with a specific reason
+
+By request, every file reporting "n/a" instead of a real duration/verdict
+was individually audited rather than left as a blanket "Resource Timing
+sometimes misses things." Two distinct root causes were found:
+
+- **Wrong endpoint, not a timing issue** - `047` (Admins Logs) asserted
+  against `/api/log`; the real call is `GET /api/entrance/list-logs`.
+  `050` (Upload History) asserted `/api/stock`; the real call is
+  `GET /api/audit`. Neither substring could ever have matched, at any
+  timing. **Fixed** by asserting the correct endpoint.
+- **Genuine timing race** (same as `064`'s original bug - reading before
+  the fetch is captured in the buffer) - `044`, `045`, `046`, `049`, `054`
+  all read Resource Timing immediately after their visibility assertion.
+  **Fixed** in all five with `waitForLoadState('networkidle')` + a 500ms
+  settle wait, inserted after the T2 timing measurement so it doesn't
+  pollute that number.
+
+**Left unmodified, with specific reasons:**
+
+| File | Why no fix was needed |
+|---|---|
+| `038` (Login) | Reads after a full page navigation (`toHaveURL` on a real nav), which settles more thoroughly than an SPA route change - has never produced "n/a" |
+| `040` (Clients list) | No structural reason to expect a race, has never shown one - an unproven wait wasn't added speculatively |
+| `041` (Reports Consult) | Reads after waiting up to 75s for the PDF toolbar button - by then the early-firing report call has had ample real time to be captured |
+| `039` (Dashboard) | Already had the correct `waitForLoadState('networkidle')` pattern before this pass - nothing to fix |
+
+**Remaining known gap:** `048` (Markets ISIN) still intermittently reports
+"n/a" even with the identical fix applied - confirmed this is the same,
+separate, already-documented issue (a real ~614 KB payload occasionally
+missed by the Resource Timing buffer for this specific endpoint - see the
+P99 methodology's `n=15` sample-size rationale above), not a new problem.
+Confirmed non-reproducible on immediate retry: failed once, passed the
+very next run at 1,810 ms.
+
+**Bonus finding, not chased further:** while re-verifying these fixes, two
+full performance suites happened to run concurrently against the shared
+live account (one headed, one headless). That pushed the new Client Portal
+tests (`067`) past their SLA ceiling - P99 8,739 ms against a 6,000 ms max,
+and the single-sample Reports test failed once too. Re-running `067` alone
+immediately after both concurrent runs finished passed cleanly (5/5, P99
+back to 2,750/3,451 ms - the expected WARN-not-FAIL range). This is a third
+independent confirmation of the "concurrent load pushes tail latency past
+SLA" pattern already documented for Consult (Issue 19), now demonstrated
+experimentally rather than accidentally, on a completely different flow
+(client-portal report rendering) - not a bug in `067`, and a good reminder
+of exactly why this suite runs single-worker (see `playwright.config.ts`).

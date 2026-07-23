@@ -12,6 +12,10 @@ test.describe('Performance - Admins Unsupervised Asset Classes', () => {
     await expect(page.getByRole('button', { name: 'Add' })).toBeVisible();
     const clickToVisibleMs = Date.now() - start;
 
+    // Settling before reading Resource Timing avoids the race found in
+    // 064's pagination test (fetch not yet appended when "Add" renders).
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     const groupDataclassDurations = await getResourceDurations(page, '/api/group-dataclass');
 
     const summary = [

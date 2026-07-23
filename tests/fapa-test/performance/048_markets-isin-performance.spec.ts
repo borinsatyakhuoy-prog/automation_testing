@@ -11,6 +11,12 @@ test.describe('Performance - Markets ISIN', () => {
     await expect(page.getByRole('tab', { name: 'ISIN', selected: true })).toBeVisible();
     const navMs = Date.now() - navStart;
 
+    // The tab-selected state renders before the (large, ~614 KB) /api/isin
+    // response is necessarily fully captured in Resource Timing - the same
+    // race found and fixed in 064's pagination test and 066's ISIN P99 test.
+    // Settling here (after the T2 measurement) makes the capture reliable.
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     const isinDurations = await getResourceDurations(page, '/api/isin');
 
     const searchStart = Date.now();

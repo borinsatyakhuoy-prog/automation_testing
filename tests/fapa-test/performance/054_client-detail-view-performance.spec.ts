@@ -13,6 +13,12 @@ test.describe('Performance - Client Detail View', () => {
     await expect(page.getByText('Client Information')).toBeVisible();
     const openMs = Date.now() - openStart;
 
+    // "Client Information" rendering doesn't guarantee the Resource Timing
+    // entry for the underlying /api/account/{id} fetch has been appended
+    // yet - the same race found and fixed in 064's pagination test.
+    // Settling here (after the T2 measurement) makes the capture reliable.
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
     const accountDurations = await getResourceDurations(page, '/api/account/');
 
     const backStart = Date.now();
