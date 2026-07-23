@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { login, requireReportClientName } from '../helpers/auth';
 import { consultReport, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
-import { attachMetrics, assertSLA, SLA } from '../helpers/performance';
+import { getResourceDurations, attachMetrics, assertSLA, SLA } from '../helpers/performance';
 
 /**
  * Formal SLA gate for the report-lifecycle suite - the main feature built in
@@ -66,16 +66,47 @@ test.describe('Performance - Report Lifecycle (main feature SLA gate)', () => {
     await openMonthReportsList(page);
     await openMonthReportActionsMenu(page);
 
+    // PUT /api/report/validate/{id} permanently marks a report as verified -
+    // a genuine one-way state change, unlike every other endpoint measured
+    // in this suite (which are either read-only or freely repeatable). Only
+    // timed here using the same "skip if already verified" pattern already
+    // established in report-lifecycle/001_portfolio.spec.ts - deliberately
+    // n=1, not P99: repeating a one-way action dozens of times to get a
+    // percentile isn't a cost this suite is willing to pay just for a
+    // statistic (see the real-data-safety principle at the top of
+    // specs/planner.md). Reports "n/a" honestly on months where the report
+    // was already validated by prior runs, rather than forcing a new
+    // validation just to get a number.
+    let validateMs: number | null = null;
+    const verifiedBadge = page.getByText('verified').first();
+    if (!(await verifiedBadge.isVisible().catch(() => false))) {
+      const validateStart = Date.now();
+      await page.getByRole('menuitem', { name: 'Validate PDF' }).click();
+      await expect(page.getByText('Are you sure you want to')).toBeVisible();
+      await page.getByRole('button', { name: 'Confirm' }).click();
+      await expect(verifiedBadge).toBeVisible({ timeout: 60_000 });
+      validateMs = Date.now() - validateStart;
+      await openMonthReportActionsMenu(page);
+    }
+
     const downloadStart = Date.now();
     const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
     await page.getByRole('menuitem', { name: 'Download' }).click();
     await downloadPromise;
     const downloadMs = Date.now() - downloadStart;
 
+    const validateDurations = await getResourceDurations(page, '/api/report/validate/');
+
     const summary = [
       assertSLA('SLA T6 - Report Lifecycle: Consult to "being generated"', consultMs, SLA.REPORT_CONSULT),
       assertSLA('SLA T6b - Report Lifecycle: Consult to report rendered', consultToRenderedMs, SLA.REPORT_CONSULT_RENDERED),
       assertSLA('SLA T7 - Report Lifecycle: Generate PDF to completion', generateMs, SLA.PDF_GENERATION),
+      validateMs !== null
+        ? assertSLA('SLA T2 (n=1) - Validate PDF click to verified badge', validateMs, SLA.NAVIGATION)
+        : 'SLA T2 (n=1) - Validate PDF click to verified badge: n/a (already validated by a prior run this month - skipped, not re-validated just to get a number)',
+      validateDurations[0] !== undefined
+        ? assertSLA('SLA T3 (n=1) - PUT /api/report/validate/{id}', validateDurations[0], SLA.API_READ)
+        : 'SLA T3 (n=1) - PUT /api/report/validate/{id}: n/a (already validated by a prior run this month)',
       assertSLA('SLA T8 - Report Lifecycle: Download click to download event', downloadMs, SLA.DOWNLOAD_ACTION),
       `TOTAL: Consult click to PDF completion (real end-to-end wait): ${consultToRenderedMs + generateMs} ms`,
       `Success toast observed directly: ${sawToast} (this environment sometimes misses it under load even on real success - see specs/planner.md AC5)`,

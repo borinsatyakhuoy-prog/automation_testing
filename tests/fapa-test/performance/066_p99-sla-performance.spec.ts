@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login, requireReportClientName } from '../helpers/auth';
-import { consultReport } from '../helpers/reports';
+import { consultReport, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
 import { getResourceDurations, assertP99SLA, attachMetrics, SLA } from '../helpers/performance';
 
 /**
@@ -191,13 +191,40 @@ test.describe('Performance - P99 SLA (slow tiers, reduced sample size)', () => {
         .waitFor({ state: 'visible', timeout: 20_000 })
         .catch(() => {});
       await page.getByRole('button').filter({ hasText: 'picture_as_pdf' }).waitFor({ state: 'visible', timeout: 75_000 });
+      await page.waitForLoadState('networkidle');
       samples.push(Date.now() - start);
       await page.getByRole('button', { name: 'Dashboard' }).click();
       await expect(page).toHaveURL(/\/dashboard/);
     }
 
+    // Each Consult also fires ~11 independent per-domain "report section"
+    // endpoints (see specs/performance-sla.md's "Report generation
+    // architecture" section) - these 5 real Consult cycles are already
+    // triggering them, so capture and gate them here too rather than
+    // leaving them permanently undocumented ("discovered via network
+    // inspection" but never actually measured).
+    const sectionEndpoints: Array<[string, string]> = [
+      ['GET /api/consolidation-global?', '/api/consolidation-global?'],
+      ['GET /api/consolidation-global-filtered?', '/api/consolidation-global-filtered?'],
+      ['GET /api/consolidation-global-bank?', '/api/consolidation-global-bank?'],
+      ['GET /api/passif?', '/api/passif?'],
+      ['GET /api/real-estate?', '/api/real-estate?'],
+      ['GET /api/gestion-locative?', '/api/gestion-locative?'],
+      ['GET /api/movements-bancaire?', '/api/movements-bancaire?'],
+      ['GET /api/arts/clients/', '/api/arts/clients/'],
+      ['GET /api/direct-private-equity/clients/related?', '/api/direct-private-equity/clients/related?'],
+      ['GET /api/unsupervised/stock/clientName/', '/api/unsupervised/stock/clientName/'],
+      ['GET /api/report-todos/clients/', '/api/report-todos/clients/'],
+    ];
+    const sectionSummary: string[] = [];
+    for (const [label, substr] of sectionEndpoints) {
+      const durations = await getResourceDurations(page, substr);
+      sectionSummary.push(assertP99SLA(`SLA T3 (P99, n<=5) - ${label}`, durations.slice(0, 5), SLA.API_READ));
+    }
+
     const summary = [
       assertP99SLA('SLA T6b (P99, n=5) - Consult click to report rendered', samples, SLA.REPORT_CONSULT_RENDERED),
+      ...sectionSummary,
     ];
     console.log(`\n[PERF] P99 Report Consult:\n  ${summary.join('\n  ')}`);
     await attachMetrics(testInfo, 'p99-report-consult-performance-metrics', summary);
@@ -226,12 +253,45 @@ test.describe('Performance - P99 SLA (slow tiers, reduced sample size)', () => {
         await page.waitForTimeout(15_000);
       }
       samples.push(Date.now() - start);
+
+      // Opening the report's row actions menu is what triggers
+      // GET /api/report/check-validated/{id} and GET /api/report/{id}/pdf
+      // (confirmed live via network inspection) - already a real, expected
+      // step in this project's report lifecycle (see 055), not a new
+      // action added just to capture these two endpoints.
+      await openMonthReportsList(page);
+      await openMonthReportActionsMenu(page);
+      await page.waitForLoadState('networkidle');
+      // Close the still-open row actions menu - its overlay backdrop
+      // otherwise intercepts the next click and hangs indefinitely.
+      await page.keyboard.press('Escape');
+
       await page.getByRole('button', { name: 'Dashboard' }).click();
       await expect(page).toHaveURL(/\/dashboard/);
     }
 
+    const checkValidatedDurations = await getResourceDurations(page, '/api/report/check-validated/');
+    // GET /api/report/{uuid}/pdf is easy to conflate with the similarly-
+    // named GET /api/report/pdf?client=... (a different endpoint fired
+    // during Consult) - getResourceDurations' plain substring match can't
+    // tell them apart, so this one reads full URLs directly and matches
+    // the UUID-then-/pdf shape specifically.
+    const reportPdfDurations: number[] = await page.evaluate(() => {
+      return performance
+        .getEntriesByType('resource')
+        .filter((r) => /\/api\/report\/[a-f0-9-]{20,}\/pdf(\?|$)/.test(r.name))
+        .map((r) => Math.round(r.duration))
+        .reverse();
+    });
+
     const summary = [
       assertP99SLA('SLA T7 (P99, n=3) - Generate PDF click to completion', samples, SLA.PDF_GENERATION),
+      assertP99SLA(
+        'SLA T3 (P99, n<=3) - GET /api/report/check-validated/{id}',
+        checkValidatedDurations.slice(0, 3),
+        SLA.API_READ
+      ),
+      assertP99SLA('SLA T3 (P99, n<=3) - GET /api/report/{id}/pdf', reportPdfDurations.slice(0, 3), SLA.API_READ),
     ];
     console.log(`\n[PERF] P99 PDF Generation:\n  ${summary.join('\n  ')}`);
     await attachMetrics(testInfo, 'p99-pdf-generation-performance-metrics', summary);

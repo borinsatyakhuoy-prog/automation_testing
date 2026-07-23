@@ -558,3 +558,90 @@ SLA" pattern already documented for Consult (Issue 19), now demonstrated
 experimentally rather than accidentally, on a completely different flow
 (client-portal report rendering) - not a bug in `067`, and a good reminder
 of exactly why this suite runs single-worker (see `playwright.config.ts`).
+
+## Closing the "discovered but never measured" gap (2026-07-23)
+
+The n/a audit above covered every *existing* assertion that failed to
+capture a duration. Separately, a live-network review turned up a table of
+14 endpoints that were discovered during that investigation but never
+wrapped in a timing assertion at all - real calls firing on every Consult,
+PDF generation, ISIN edit, and sign-out, with zero SLA coverage. Each was
+given a real P99 (or, for the one genuine one-way write, n=1) measurement:
+
+**`066` T6b Report Consult P99 - all 11 per-domain section endpoints**,
+captured alongside the existing Consult-render P99 (n=5 each):
+
+| Endpoint | min | P50 | P99 | Verdict |
+|---|---|---|---|---|
+| `GET /api/consolidation-global?` | 39 | 51 | 105 ms | PASS |
+| `GET /api/consolidation-global-filtered?` | 41 | 46 | 104 ms | PASS |
+| `GET /api/consolidation-global-bank?` | 41 | 52 | 101 ms | PASS |
+| `GET /api/passif?` | 21 | 26 | 71 ms | PASS |
+| `GET /api/real-estate?` | 31 | 68 | 102 ms | PASS |
+| `GET /api/gestion-locative?` | 28 | 62 | 100 ms | PASS |
+| `GET /api/movements-bancaire?` | 399 | 414 | 518 ms | PASS |
+| `GET /api/arts/clients/` | 19 | 20 | 369 ms | PASS |
+| `GET /api/direct-private-equity/clients/related?` | 18 | 28 | 324 ms | PASS |
+| `GET /api/unsupervised/stock/clientName/` | 16 | 36 | 365 ms | PASS |
+| `GET /api/report-todos/clients/` | 110 | 146 | 359 ms | PASS |
+
+All 11 disambiguated from similarly-named neighbors via a trailing `?` on
+the substring (e.g. `consolidation-global?` vs. `consolidation-global-
+filtered?`), since several share a common prefix.
+
+**`066` T7 PDF Generation P99 - the two remaining PDF-lifecycle calls**
+(n=3, matching the existing Generate-PDF sample size for this expensive
+tier):
+
+| Endpoint | min | P50 | P99 | Verdict |
+|---|---|---|---|---|
+| `GET /api/report/check-validated/{id}` | 16 | 16 | 18 ms | PASS |
+| `GET /api/report/{id}/pdf` | 50 | 56 | 112 ms | PASS |
+
+`report/{id}/pdf` needed a precise regex match via `page.evaluate()`
+(`/\/api\/report\/[a-f0-9-]{20,}\/pdf(\?|$)/`) rather than a plain
+substring, since a plain `/pdf` substring would also match the
+differently-shaped `/api/report/pdf?client=...` list-level call.
+
+Getting here required opening the report actions menu after each PDF
+sample (to trigger `check-validated`/`{id}/pdf`) and closing it again
+before returning to Dashboard - the first attempt hung indefinitely
+(458 retries) because the menu's `cdk-overlay-backdrop` intercepted the
+next click; fixed with `page.keyboard.press('Escape')` before the
+Dashboard click.
+
+**`063` new test - currency-code autocomplete P99** (n=15, open/cancel the
+ISIN Edit dialog, never save): `GET /api/currency-detail/distinct?search=`
+- min 41, P50 62, **P99 82 ms**, PASS.
+
+**`059` new test - Sign Out P99** (n=10 login/logout cycles): UI click-to-
+`/login` P99 = 882 ms, PASS. `DELETE /api/logout` itself only ever
+captures **n=1**, not 10 - this is structural, not a capture bug like the
+ISIN gap: each cycle's `login()` performs a full page navigation, and
+Resource Timing's buffer is per-document, so it resets on navigation.
+Every earlier cycle's logout entry is wiped by the *next* cycle's login
+navigation before the test ever reads the buffer; only the final cycle's
+entry survives to be read. Any endpoint measured across repeated full
+page-navigation cycles (as opposed to SPA-internal route changes) will
+show this same n<=1 ceiling by construction.
+
+**`055` - `PUT /api/report/validate/{id}` (n=1, not P99)**: added using the
+identical "skip if already verified" pattern from `report-lifecycle/
+001_portfolio.spec.ts`. This is a genuine one-way state change (permanently
+marks a report verified/visible to the client), unlike every other
+endpoint in this audit - deliberately not repeated dozens of times to
+compute a percentile, per this project's real-data-safety principle (see
+`specs/planner.md`). Verified 2026-07-23: passed, reported an honest
+`n/a` (already validated by an earlier run this session) rather than
+forcing a spurious re-validation.
+
+**`POST /api/stock` (the data-import endpoint) - decision: left as n/a,
+by explicit user choice.** This is the one endpoint in the original table
+still without a real duration. It's currently only exercised in network-
+mocked error-handling tests. Adding real coverage - even a single sample -
+means running the actual import against the live account, creating a
+permanent upload/import history record each time; P99 coverage would mean
+15-30 such records. Asked the user directly (2026-07-23) whether to add a
+single real sample, full P99, or leave it as-is: **chose to leave it as
+n/a**, consistent with the real-data-safety principle applied to every
+other write-triggering endpoint in this suite.
