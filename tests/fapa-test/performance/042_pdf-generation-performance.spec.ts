@@ -22,8 +22,19 @@ test.describe('Performance - PDF Generation', () => {
     // so this test's own PDF Generation number can't be misread as including it.
     const consultStart = Date.now();
     await consultReport(page, clientName);
-    await expect(page.getByText(/report is being generated/i)).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText(/report is being generated/i)).toBeHidden({ timeout: 75_000 });
+    // Same rationale as helpers/reports.ts's waitForReportRendered() and the
+    // matching 2026-07-23 fix in 041/055: don't hard-fail if the progress
+    // text never appears (e.g. a fast/cached Consult), and don't gate
+    // completion on that text going *hidden* - a locator matching zero
+    // elements is trivially "hidden", which can false-positive a
+    // render-complete signal. This file was missed in that same-day fix and
+    // failed exactly this way on a later run (toBeVisible timed out at 20s).
+    // Gate on the PDF toolbar button becoming visible instead.
+    await page
+      .getByText(/report is being generated/i)
+      .waitFor({ state: 'visible', timeout: 20_000 })
+      .catch(() => {});
+    await page.getByRole('button').filter({ hasText: 'picture_as_pdf' }).waitFor({ state: 'visible', timeout: 75_000 });
     const consultToRenderedMs = Date.now() - consultStart;
     await page.waitForLoadState('networkidle');
 
