@@ -1,6 +1,6 @@
 # Family Partners — Performance Summary (for Product)
 
-_Last updated: 2026-07-23 (re-verified twice more the same day, including catching and correcting a measurement error in our own test tooling - see the ISIN section below). Source data: `specs/performance-sla.md` and `specs/planner.md` §17 (full technical detail, QA/engineering audience). This document translates the same real, measured data into plain terms for product/business decision-making._
+_Last updated: 2026-07-23 (re-verified twice more the same day, including catching and correcting a measurement error in our own test tooling, then extending coverage to staff and client accounts - see the sections below). Source data: `specs/performance-sla.md` and `specs/planner.md` §17 (full technical detail, QA/engineering audience). This document translates the same real, measured data into plain terms for product/business decision-making._
 
 ## Bottom line
 
@@ -67,6 +67,16 @@ These are the two operations users actually expect to take a moment (they involv
 **In plain terms:** a user opening this screen will wait 2-4 seconds, not a jarring wait — this is not a "the app is broken" situation, and it does always finish loading. But it is a confirmed, repeatable finding, and it's the single clearest performance issue anywhere in this app. We know exactly why: the screen loads **all 2,438 rows in one go** instead of a page at a time, the way the Clients and Admins lists already do.
 
 **Recommendation:** load this screen a page at a time (the same pattern already used for Clients and Admins) — the actual root-cause fix, not just a threshold to relax. This is a well-understood, standard fix, not a research problem, and given it's now confirmed (not suspected) and this dataset will likely keep growing, it's worth prioritizing soon rather than "someday."
+
+## New this round: tested as a staff member and as an end client, not just an admin
+
+Every number above came from testing logged in as a full administrator. We extended testing to the app's other two account types to make sure "fast for an admin" actually means "fast for everyone":
+
+- **Staff (non-admin) accounts** perform identically to admin accounts on everything they're allowed to see — same speed, same everything. The only difference is they correctly can't see the Admin section at all (confirmed it's a real, server-enforced restriction, not just a hidden button someone could work around).
+- **Clients logging into their own portal** (a much simpler view — just their dashboard and their own reports, nothing else) load their dashboard and report in about 2-2.5 seconds. That's a bit slower than an admin's dashboard, but for a good reason: a client's "Reports" page renders their *entire* report directly on the page, not a lightweight list — so it's naturally doing more work per click. The underlying data-fetching itself is very fast (well under a tenth of a second); the time is all in displaying the full report content.
+- Along the way, we also figured out something the team didn't previously have written down: **a report only becomes visible to a client after it's been "Validated," not just generated.** Simply generating a PDF isn't enough — the advisor has to take that extra Validate step, or the client sees a blank/placeholder dashboard forever, with nothing telling them why.
+
+**Bottom line:** the app performs consistently well across all three account types. No new problems found for staff or client accounts — just confirmation that what we already knew about admin performance holds true everywhere else too.
 
 ## What we don't have (and why that's OK for now)
 

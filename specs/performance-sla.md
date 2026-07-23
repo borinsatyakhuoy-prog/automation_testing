@@ -411,3 +411,102 @@ this is now the single most actionable finding in the entire suite; and
 **(2) Consult's tail-latency stall under repeated/sustained use** - real and
 reproducible, but its exact server-side cause is outside what browser-based
 measurement can determine.
+
+## Role-based coverage (2026-07-23): Client Portal and EMPLOYE role
+
+Every test above logs in as ADMIN. By request, extended coverage to the
+other two roles this app has, using two dedicated test accounts (credentials
+in `.env`, see `.env.example` for the pattern - passwords set directly via
+each role's own "Reset password" admin action, no email round-trip needed):
+
+**EMPLOYE role** (`068_employee-role-performance.spec.ts`): confirmed live that EMPLOYE has no
+"Admins" nav item at all, and a direct `/admin` navigation **redirects away
+server-side** - not just a hidden UI link, real backend authorization.
+`GET /api/me` returns `"role":"EMPLOYEE"` (the UI's "EMPLOYE" label is a
+truncated display form of the same value) and a numeric `"permission":60`
+field. For every operational screen EMPLOYE *can* reach (Clients, Markets),
+it hits the **identical endpoints** ADMIN does (`/api/client`,
+`/api/currency-detail`, etc.) with statistically indistinguishable timing -
+confirmed with a P99 pass, not just a single sample: 30 paced
+Dashboard↔Clients cycles measured **P99 788 ms** (UI click-to-visible,
+n=30) and **P99 89 ms** (`GET /api/client?...`, n=29) - both comfortably
+under target, essentially the same profile as ADMIN's own P99 numbers for
+the identical flow. This is a parity confirmation, not new endpoint
+discovery.
+
+**Client Portal role**: a genuinely distinct, far more restricted
+surface - only "Dashboard" and "Reports" in the nav. Investigating this
+answered the open question `specs/planner.md` §14.2 had left unresolved
+("what advisor-side action makes a report visible in the client portal?"):
+**it's specifically the "Validate PDF" action, not Consult or Generate PDF
+alone** - confirmed directly from the app's own confirmation dialog copy:
+*"Once validated, this PDF will be visible on the client's dashboard."*
+Before validation, the client dashboard shows only greyed-out placeholder
+widgets ("No data available at the moment.") regardless of how much real
+data the advisor side already has for that client - Consult and Generate
+PDF alone are not enough.
+
+To get a *representative* (not empty-state) client-portal performance
+measurement, seeded one of this project's existing disposable test
+clients ("QA Mail Test Client", previously used only for the mail-service
+notification investigation) with real portfolio data: took the existing
+`1. JDD_model_portefeuille.xlsx` fixture already used by
+`report-lifecycle/001_portfolio.spec.ts`, and produced a new derived copy
+(`fixtures/qa-mail-test-client-portfolio.xlsx`) with every `"QA Automation
+Client"` cell retargeted to `"QA Mail Test Client"` (the client is
+determined entirely by column A's text content, confirmed by unzipping the
+`.xlsx` and inspecting `xl/worksheets/sheet1.xml` directly) - the original
+fixture is untouched. Imported, Consulted, Generated, and Validated for the
+current month before measuring, so `067_client-portal-performance.spec.ts`
+exercises the same real-content weight a genuine client would see, not a
+trivial empty page.
+
+| Flow | Tier | n | Result | Verdict |
+|---|---|---|---|---|
+| Client login → dashboard | T2 | 2 (single-sample) | 1,639-4,477 ms | PASS/WARN - noisy, not consistently slow |
+| Client Dashboard click-to-visible (P99) | T2 | 15 | min 547 / P50 1,410 / **P99 2,263** ms | **WARN on P99** - consistent, not noise |
+| Client Reports click-to-visible (P99) | T2 | 15 | min 1,625 / P50 1,944 / **P99 2,184** ms | **WARN on P99** - consistent, not noise |
+| `GET /api/dashboard` (P99, client role) | T3 | 13 captured | min 47 / P50 57 / **P99 98** ms | PASS - comfortably fast |
+| `GET /api/report/doc` (P99, client role) | T3 | 13 captured | min 16 / P50 19 / **P99 66** ms | PASS - comfortably fast |
+| Client Sign Out | T2 | 1 (single-sample) | 212-250 ms | PASS |
+
+The Reports/Dashboard click-to-visible WARN is confirmed real and
+consistent (P99 sampling, not a single noisy reading) - and now cleanly
+separated from its cause: the underlying API calls are fast (P99 66-98 ms),
+so the WARN is pure UI render weight, not a slow query. The client-portal
+"Reports" click renders the *entire* validated report inline (same content
+weight as the advisor's post-Consult view), not a lightweight document
+list, so landing above the 2,000 ms navigation target is the structurally
+correct expectation, not a bug worth chasing.
+
+### Full endpoint catalog discovered this round
+
+Live-exploring the import → Consult → Generate → Validate → client-view
+flow end to end surfaced far more of the report-generation architecture
+than previously catalogued:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/stock` | The actual data-import endpoint (Upload > Import) |
+| `PUT /api/report/validate/{reportId}` | The real Validate PDF / publish-to-client action |
+| `GET /api/report/check-validated/{reportId}` | Whether a given report is already validated |
+| `GET /api/report/{reportId}/pdf` | Fetches/confirms the generated PDF |
+| `GET /api/report-todos/clients/{name}?reportDate=` | The report's "To Do List" section data |
+| `GET /api/consolidation-global` / `-filtered` / `-bank` `?date=&client=` | Portfolio consolidation views (global, filtered, by depository bank) |
+| `GET /api/passif?client=&date=` | Liabilities section |
+| `GET /api/real-estate?client=&date=` | Real-estate assets section |
+| `GET /api/gestion-locative?client=&date=` | Rental management section |
+| `GET /api/movements-bancaire?client=&date=` | Bank movements section |
+| `GET /api/arts/clients/{name}?reportDate=` | Works-of-art section |
+| `GET /api/direct-private-equity/clients/related?client=` | Private equity section |
+| `GET /api/unsupervised/stock/clientName/{name}` | Unsupervised asset classes for a client |
+| `GET /api/currency-detail/distinct?search=` | Currency-code autocomplete (fires from the ISIN Edit dialog) |
+| `DELETE /api/logout` | The real sign-out endpoint |
+
+Each of the ~14 report "sections" discovered in the earlier gap-analysis
+investigation corresponds to one of these named REST resources, confirming
+the report is assembled from genuinely independent, per-domain data
+sources rather than one monolithic query - consistent with that
+investigation's finding that every individual call was fast and the real
+cost sits in the gaps between them, not in any of these queries
+themselves.
