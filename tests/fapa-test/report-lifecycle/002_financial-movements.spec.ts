@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { login, requireReportClientName } from '../helpers/auth';
-import { consultReport, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
+import { consultReport, waitForReportRendered, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
 import { UPLOAD_CATEGORIES, excelFixturePath, downloadPathFor } from '../helpers/uploadCategories';
 
 /**
@@ -72,6 +72,7 @@ test('Generate PDF produces a downloadable report', async ({ page }) => {
   const clientName = requireReportClientName();
 
   await consultReport(page, clientName);
+  await waitForReportRendered(page);
   await page.waitForLoadState('networkidle');
 
   await page.getByRole('button').filter({ hasText: 'picture_as_pdf' }).click();
@@ -100,6 +101,7 @@ test('Validate PDF (skips if already verified)', async ({ page }) => {
   const clientName = requireReportClientName();
 
   await consultReport(page, clientName);
+  await waitForReportRendered(page);
   await page.waitForLoadState('networkidle');
 
   await openMonthReportsList(page);
@@ -128,6 +130,7 @@ test('Download PDF produces the same report independently of the Generate/Valida
   const clientName = requireReportClientName();
 
   await consultReport(page, clientName);
+  await waitForReportRendered(page);
   await page.waitForLoadState('networkidle');
 
   await openMonthReportsList(page);

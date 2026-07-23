@@ -51,7 +51,14 @@ export async function consultReport(page: Page, clientName: string) {
   // dropdown panel to actually finish closing avoids that overlap.
   await page.locator('.mat-mdc-menu-item').first().waitFor({ state: 'hidden' }).catch(() => {});
 
-  await page.getByRole('button', { name: 'Consult' }).click();
+  // exact: true matters once a report has already rendered on this page (e.g.
+  // repeated Consult calls in the same test, as in the P99 sampling loops in
+  // 066_p99-sla-performance.spec.ts) - the rendered report tree's per-bank
+  // toggle buttons are named "Toggle Consultation des portefeuilles ...",
+  // which a non-exact "Consult" match also matches, hitting a Playwright
+  // strict-mode multi-element error. Confirmed live: reproduced exactly this
+  // way on the 2nd of 5 repeated Consult cycles.
+  await page.getByRole('button', { name: 'Consult', exact: true }).click();
 }
 
 /**
@@ -84,6 +91,43 @@ async function clickWithRetry(locator: Locator, attempts = 3, perAttemptTimeoutM
     }
   }
   throw lastError;
+}
+
+/**
+ * Waits for Consult's async "report is being generated" state to appear and
+ * then disappear - i.e. for the report to have actually finished rendering.
+ *
+ * Root cause of a real, reproducible failure (2026-07-22): every
+ * report-lifecycle test called `consultReport()` then only
+ * `page.waitForLoadState('networkidle')` before interacting with report-view
+ * elements (the "list" toggle, the PDF icon). `networkidle` is not a
+ * reliable proxy for "the report has visually finished rendering" - it can
+ * settle before the report tree is done painting, so `openMonthReportsList`
+ * would occasionally try to click a "list" button that didn't exist yet.
+ * Failure screenshots confirmed this directly: the page was still on the
+ * Consult search form (Consult button in its `[active]` state, no report
+ * tree), not stuck on an unclickable-but-present button. This was previously
+ * misdiagnosed as Material-component click flakiness (Issue 4/7 in
+ * exploratory-findings.md) - it was actually a missing wait. See
+ * specs/performance-sla.md T6b for the ~20-25s baseline this wait covers.
+ *
+ * Deliberately does NOT gate on the progress text going hidden: a locator
+ * matching zero elements is trivially "hidden" in Playwright, so on the
+ * (real, observed) runs where the progress text never appears at all - e.g.
+ * a fast/cached Consult, or some other edge case - `waitFor({state:
+ * 'hidden'})` on that same locator would resolve immediately with no real
+ * wait, giving a false render-complete signal while the report toolbar still
+ * hadn't rendered (confirmed live: exactly this happened, racing ahead to a
+ * still-blank search screen). Waiting for a concrete, always-present
+ * rendered-report element instead (the PDF toolbar's `picture_as_pdf`
+ * button) can't produce a false positive that way.
+ */
+export async function waitForReportRendered(page: Page) {
+  await page
+    .getByText(/report is being generated/i)
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .catch(() => {});
+  await page.getByRole('button').filter({ hasText: 'picture_as_pdf' }).waitFor({ state: 'visible', timeout: 75_000 });
 }
 
 /** Opens the "This month" / "Other Months" generated-reports list view. */
