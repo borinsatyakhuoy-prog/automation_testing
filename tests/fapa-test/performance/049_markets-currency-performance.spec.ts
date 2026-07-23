@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login } from '../helpers/auth';
-import { attachMetrics, assertSLA, SLA } from '../helpers/performance';
+import { getResourceDurations, attachMetrics, assertSLA, SLA } from '../helpers/performance';
 
 test.describe('Performance - Markets Currency', () => {
   test('Currency tab and Add Currency dialog open within SLA', async ({ page }, testInfo) => {
@@ -11,6 +11,8 @@ test.describe('Performance - Markets Currency', () => {
     await page.getByRole('tab', { name: 'Currency' }).click();
     await expect(page.getByRole('button', { name: 'Add Currency' })).toBeVisible();
     const tabMs = Date.now() - tabStart;
+
+    const currencyDetailDurations = await getResourceDurations(page, '/api/currency-detail');
 
     const dialogStart = Date.now();
     await page.getByRole('button', { name: 'Add Currency' }).click();
@@ -24,6 +26,9 @@ test.describe('Performance - Markets Currency', () => {
 
     const summary = [
       assertSLA('SLA T2 - Currency tab click to visible', tabMs, SLA.NAVIGATION),
+      currencyDetailDurations[0] !== undefined
+        ? assertSLA('SLA T3 - GET /api/currency-detail duration', currencyDetailDurations[0], SLA.API_READ)
+        : 'SLA T3 - GET /api/currency-detail: n/a',
       assertSLA('SLA T5 - Add Currency dialog open', dialogMs, SLA.DIALOG_OPEN),
     ];
     console.log(`\n[PERF] Markets Currency:\n  ${summary.join('\n  ')}`);

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login } from '../helpers/auth';
-import { attachMetrics, assertSLA, SLA } from '../helpers/performance';
+import { getResourceDurations, attachMetrics, assertSLA, SLA } from '../helpers/performance';
 
 test.describe('Performance - Client Detail View', () => {
   test('client detail view opens and returns within SLA', async ({ page }, testInfo) => {
@@ -13,6 +13,8 @@ test.describe('Performance - Client Detail View', () => {
     await expect(page.getByText('Client Information')).toBeVisible();
     const openMs = Date.now() - openStart;
 
+    const accountDurations = await getResourceDurations(page, '/api/account/');
+
     const backStart = Date.now();
     await page.getByRole('button', { name: 'Back' }).click();
     await expect(page).toHaveURL(/\/clients/);
@@ -20,6 +22,9 @@ test.describe('Performance - Client Detail View', () => {
 
     const summary = [
       assertSLA('SLA T2 - View detail click to Client Information visible', openMs, SLA.NAVIGATION),
+      accountDurations[0] !== undefined
+        ? assertSLA('SLA T3 - GET /api/account/{id} duration', accountDurations[0], SLA.API_READ)
+        : 'SLA T3 - GET /api/account/{id}: n/a',
       assertSLA('SLA T2 - Back click to Clients list', backMs, SLA.NAVIGATION),
     ];
     console.log(`\n[PERF] Client Detail View:\n  ${summary.join('\n  ')}`);

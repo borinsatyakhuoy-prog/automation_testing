@@ -49,6 +49,63 @@ export async function getResourceDurations(page: Page, urlSubstr: string): Promi
   }, urlSubstr);
 }
 
+/**
+ * Nearest-rank percentile over a set of samples (e.g. `percentile(durations, 99)`
+ * for P99). Used to gate a *distribution* of repeated measurements rather
+ * than a single sample - see `assertP99SLA` below. With a small sample count
+ * (this project scales sample size down for expensive flows like Consult/PDF
+ * Generation to avoid hammering the shared live account), P99 converges
+ * toward the observed max - that's expected and reported honestly rather
+ * than presented as statistically rigorous.
+ */
+export function percentile(samples: number[], p: number): number {
+  if (samples.length === 0) return -1;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[idx];
+}
+
+export interface SampleRange {
+  count: number;
+  min: number;
+  max: number;
+  p50: number;
+  p99: number;
+}
+
+/** Summarizes a set of repeated/parameterized samples into min/max/P50/P99. */
+export function summarizeSamples(samples: number[]): SampleRange {
+  if (samples.length === 0) return { count: 0, min: -1, max: -1, p50: -1, p99: -1 };
+  return {
+    count: samples.length,
+    min: Math.min(...samples),
+    max: Math.max(...samples),
+    p50: percentile(samples, 50),
+    p99: percentile(samples, 99),
+  };
+}
+
+/**
+ * P99 SLA gate: computes the 99th percentile of `samples` and asserts it
+ * against `tier.max` (the same hard-fail ceiling `assertSLA` uses for a
+ * single sample) - the point is that a slow tail request can't hide behind
+ * one lucky fast sample. Returns a formatted line reporting the full
+ * min/P50/P99/max range regardless of outcome.
+ */
+export function assertP99SLA(label: string, samples: number[], tier: SlaTier): string {
+  const r = summarizeSamples(samples);
+  if (r.count === 0) {
+    return `${label}: n/a (no samples captured)`;
+  }
+  const verdict = rateSla(r.p99, tier);
+  const line = `${label}: n=${r.count}, min=${r.min} ms, P50=${r.p50} ms, P99=${r.p99} ms, max=${r.max} ms  [SLA ${verdict} on P99 - target ${tier.target} ms / max ${tier.max} ms]`;
+  expect(
+    r.p99,
+    `${label} P99 (${r.p99} ms, n=${r.count}) exceeded the formal SLA max of ${tier.max} ms`
+  ).toBeLessThanOrEqual(tier.max);
+  return line;
+}
+
 /** Attaches a human-readable metrics summary to the HTML/Allure report. */
 export async function attachMetrics(testInfo: TestInfo, label: string, lines: string[]) {
   await testInfo.attach(label, { body: lines.join('\n'), contentType: 'text/plain' });

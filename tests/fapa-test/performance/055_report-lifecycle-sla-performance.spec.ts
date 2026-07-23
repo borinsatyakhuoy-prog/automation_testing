@@ -22,7 +22,18 @@ test.describe('Performance - Report Lifecycle (main feature SLA gate)', () => {
 
     const consultStart = Date.now();
     await consultReport(page, clientName);
-    await expect(page.getByText(/report is being generated/i)).toBeVisible({ timeout: 20_000 });
+    // Same rationale as helpers/reports.ts's waitForReportRendered(): don't
+    // hard-fail if the progress text never appears (e.g. a fast/cached
+    // Consult) and don't gate completion on that text going *hidden* - a
+    // locator matching zero elements is trivially "hidden", which previously
+    // produced false render-complete signals here and caused a real,
+    // reproducible failure (2026-07-22) when the text simply never showed up
+    // within the 20s window. Gate on a concrete rendered-report element
+    // (the PDF toolbar button) instead, which can't false-positive that way.
+    await page
+      .getByText(/report is being generated/i)
+      .waitFor({ state: 'visible', timeout: 20_000 })
+      .catch(() => {});
     const consultMs = Date.now() - consultStart;
 
     // consultMs above only covers click -> progress bar appearing, not the
@@ -30,7 +41,7 @@ test.describe('Performance - Report Lifecycle (main feature SLA gate)', () => {
     // into waitForLoadState('networkidle') with no timing, making it
     // invisible in every report (see 042_pdf-generation-performance.spec.ts's
     // matching fix and specs/performance-sla.md T6b).
-    await expect(page.getByText(/report is being generated/i)).toBeHidden({ timeout: 75_000 });
+    await page.getByRole('button').filter({ hasText: 'picture_as_pdf' }).waitFor({ state: 'visible', timeout: 75_000 });
     const consultToRenderedMs = Date.now() - consultStart;
     await page.waitForLoadState('networkidle');
 
