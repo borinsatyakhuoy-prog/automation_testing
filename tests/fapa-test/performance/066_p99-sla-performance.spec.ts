@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login, requireReportClientName } from '../helpers/auth';
-import { consultReport, openMonthReportsList, openMonthReportActionsMenu } from '../helpers/reports';
+import { consultReport } from '../helpers/reports';
 import { getResourceDurations, assertP99SLA, attachMetrics, SLA } from '../helpers/performance';
 
 /**
@@ -93,13 +93,27 @@ test.describe('Performance - P99 SLA (fast tiers)', () => {
     // payload (confirmed live, not paginated), so 15 repeats already moves
     // ~9 MB through the shared dev server - a reasonable middle ground
     // between a meaningful sample and needless repeated heavy transfer.
+    //
+    // Each cycle MUST wait for networkidle before the next one fires.
+    // Root cause of a real, reproducible bug (2026-07-23): without this
+    // wait, the loop fired all 15 nav cycles back-to-back - "ISIN tab
+    // selected" resolves as soon as the tab UI switches, well before the
+    // underlying data fetch completes, so cycle N+1 could fire while
+    // cycle N's request (and its Dashboard-revisit siblings) were still
+    // in flight. That self-inflicted request pile-up made each
+    // subsequent /api/isin call queue behind a growing backlog, producing
+    // a near-perfectly linear climb across the 15 samples (confirmed live:
+    // 1,701 / 2,864 / 4,303 / ... / 21,006 ms) that had nothing to do with
+    // the endpoint's real latency - a single, properly-paced call
+    // consistently measured a flat ~1.6-1.8s TTFB. Pacing each cycle here
+    // eliminates that artifact.
     for (let i = 0; i < 15; i++) {
       await page.getByRole('button', { name: 'Dashboard' }).click();
       await expect(page).toHaveURL(/\/dashboard/);
       await page.getByRole('button', { name: 'Markets' }).click();
       await expect(page.getByRole('tab', { name: 'ISIN', selected: true })).toBeVisible();
+      await page.waitForLoadState('networkidle');
     }
-    await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
 
     const isinDurations = getResourceDurationsSlice(await getResourceDurations(page, '/api/isin?month='), 15);

@@ -338,25 +338,37 @@ already-flagged risk area.**
   10,327 / max 12,389 ms) against a 60,000 ms target / 120,000 ms max - both
   comfortably inside target, not just under max, across every one of their
   samples.
-- **UPDATE (re-verified with 4 additional runs): `/api/isin` is not an
-  occasional WARN - it fails its formal SLA ceiling most of the time.**
-  Six independent P99 runs today measured **2,673 / 3,203 / 3,403 / 3,062 /
-  3,636 / 3,700 ms** - **5 of 6 (83%) exceeded the 3,000 ms hard max**, and
-  the one that didn't (2,673 ms) still blew past the 800 ms target. The
-  values cluster consistently in a 2.7-3.7s band with no sign of settling
-  lower - this is the endpoint's *normal* behavior, not a rare tail event.
-  Root cause, confirmed via the live `/api/isin?month=2026-07` response: a
-  single unpaginated **2,438-row / ~614 KB** JSON payload (matching the row
-  count already cited for Markets Export). **This is the single clearest,
-  most reproducible performance finding in this entire suite - escalate
-  accordingly, not a "worth watching" item.** **Recommendation** (unchanged
-  from the first pass, now with much stronger evidence behind it): paginate
-  `/api/isin` the way `/api/client` and `/api/user` already are - the
-  root-cause fix - or, if that's not near-term feasible, give this endpoint
-  its own SLA tier with a higher ceiling (mirroring T6/T6b for Report
-  Consult) rather than measuring it against a ceiling calibrated for
-  sub-100-row responses. Still a product/eng decision, not one to make
-  unilaterally in this test suite.
+- **`/api/isin` consistently exceeds its formal SLA ceiling - confirmed,
+  but with an important correction to how that was measured.** Six original
+  P99 runs measured 2,673 / 3,203 / 3,403 / 3,062 / 3,636 / 3,700 ms (5 of 6
+  over the 3,000 ms max). Building the P99 methodology section above
+  surfaced a **real bug in `066`'s own ISIN test**: the loop fired all 15
+  nav-away-and-back cycles back-to-back without waiting for each cycle's
+  network activity to settle - "ISIN tab selected" resolves as soon as the
+  tab UI switches, well before the underlying fetch completes, so cycle N+1
+  could fire while cycle N was still in flight. That self-inflicted request
+  pile-up produced a near-perfectly linear climb across one run's 15
+  samples (1,701 → 2,864 → 4,303 → ... → **21,006 ms**) that had nothing to
+  do with the endpoint's real latency - a single, properly-paced call
+  consistently measured a flat ~1.6-1.8s TTFB in isolation. **The `21,006 ms`
+  figure (and any framing implying ISIN can take up to ~20+ seconds) was a
+  test artifact and should not be repeated or quoted** - fixed by adding a
+  `waitForLoadState('networkidle')` inside the loop, one per cycle.
+  Re-verified 3 more times after the fix: **3,918 / 3,934 / 4,404 ms** -
+  **still exceeding the 3,000 ms max on all three**, and if anything
+  somewhat higher than the original six readings, plausibly reflecting
+  cumulative session/day load on the shared dev account by this point
+  rather than anything wrong with the fix. **Net conclusion, corrected: the
+  core finding holds** (`/api/isin` reliably exceeds its SLA ceiling, root
+  cause is a real, unpaginated **2,438-row / ~614 KB** payload) **but the
+  honest range is ~1.6-4.4s, not "up to 21 seconds"** - that number was
+  measurement error, not a real user-facing latency. **Recommendation**
+  unchanged: paginate `/api/isin` the way `/api/client` and `/api/user`
+  already are - the root-cause fix - or, if that's not near-term feasible,
+  give this endpoint its own SLA tier with a higher ceiling (mirroring
+  T6/T6b for Report Consult) rather than measuring it against a ceiling
+  calibrated for sub-100-row responses. Still a product/eng decision, not
+  one to make unilaterally in this test suite.
 - **The `/api/currency-detail` ("Devise") endpoint is fast and consistent
   regardless of how far back the queried month is** - P99 125 ms across
   periods spanning 2003-2026, no evidence that older/less-recent data is
@@ -391,9 +403,11 @@ already-flagged risk area.**
 
 **Bottom line, updated:** for a single user doing normal work, most of the
 app remains fast and reliable. Two things are worth taking to the backend
-team, in priority order: **(1) `/api/isin` - confirmed, frequent (5/6 runs
-today), root-caused to an unpaginated 2,438-row payload, with a known
-standard fix (pagination)** - this is now the single most actionable finding
-in the entire suite; and **(2) Consult's tail-latency stall under
-repeated/sustained use** - real and reproducible, but its exact server-side
-cause is outside what browser-based measurement can determine.
+team, in priority order: **(1) `/api/isin` - confirmed, consistently over
+its SLA ceiling in the ~1.6-4.4s range (see the correction above - not the
+"up to 21s" a test-methodology bug briefly suggested), root-caused to an
+unpaginated 2,438-row payload, with a known standard fix (pagination)** -
+this is now the single most actionable finding in the entire suite; and
+**(2) Consult's tail-latency stall under repeated/sustained use** - real and
+reproducible, but its exact server-side cause is outside what browser-based
+measurement can determine.

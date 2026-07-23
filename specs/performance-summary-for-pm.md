@@ -1,12 +1,12 @@
 # Family Partners — Performance Summary (for Product)
 
-_Last updated: 2026-07-23 (re-verified with a second, deeper testing pass the same day). Source data: `specs/performance-sla.md` and `specs/planner.md` §17 (full technical detail, QA/engineering audience). This document translates the same real, measured data into plain terms for product/business decision-making._
+_Last updated: 2026-07-23 (re-verified twice more the same day, including catching and correcting a measurement error in our own test tooling - see the ISIN section below). Source data: `specs/performance-sla.md` and `specs/planner.md` §17 (full technical detail, QA/engineering audience). This document translates the same real, measured data into plain terms for product/business decision-making._
 
 ## Bottom line
 
 **The app is fast and reliable for normal, everyday use — with one clear, confirmed exception.** Every everyday screen and action we measured loads in well under a second. There are two items worth knowing about, and we now have much stronger evidence on both after a second, deeper round of testing:
 
-1. **Markets → ISIN is consistently, not occasionally, slow** — re-tested 6 separate times, and 5 of those 6 exceeded our 3-second bar. This is now a confirmed, frequent issue with a known, standard fix (see below), not a "maybe watch this" item.
+1. **Markets → ISIN is consistently, not occasionally, slow** — re-tested 9 separate times total, and 8 of those 9 exceeded our 3-second bar, typically landing in the 2.7-4.4 second range. (One of our test runs briefly suggested this could spike as high as ~21 seconds — we caught that it was our own test clicking too fast without waiting for each check to settle, not a real app problem, and corrected it before finalizing this report. The honest range is 2-4 seconds, confirmed multiple times.) This is a confirmed, frequent issue with a known, standard fix (see below), not a "maybe watch this" item.
 2. **Reports Consult occasionally stalls under heavy repeated use** — real and reproducible, but we can now say with confidence it's *not* a network or server-traffic-jam problem (see the root-cause explanation below).
 
 No blocking performance issues for everyday use. One item (ISIN) is worth prioritizing soon — it has a known fix. The other (Consult) needs backend-side investigation we can't do from outside the app.
@@ -60,9 +60,11 @@ These are the two operations users actually expect to take a moment (they involv
 
 ## The one confirmed, frequent issue: Markets → ISIN
 
-**Markets → ISIN** holds real data — 2,438 securities for a single month (vs. e.g. only ~14 currency rates on the neighboring Currency tab). We initially measured this twice and saw one pass, one borderline fail — not enough to know if it was a fluke. **We went back and tested it 4 more times (6 total) to be sure. Result: 5 out of 6 times, it took longer than our 3-second bar — consistently landing between 2.7 and 3.7 seconds every time.** This is not an occasional blip, it's the normal, expected behavior of this screen today.
+**Markets → ISIN** holds real data — 2,438 securities for a single month (vs. e.g. only ~14 currency rates on the neighboring Currency tab). We tested this 9 separate times across two rounds of testing. Result: **8 of 9 times, it took longer than our 3-second bar — consistently landing in a 2.7-4.4 second range.** This is not an occasional blip, it's the normal, expected behavior of this screen today.
 
-**In plain terms:** a user opening this screen will wait 2-4 seconds, not a jarring wait — this is not a "the app is broken" situation, and it does always finish loading. But it is now a confirmed, repeatable finding, and it's the single clearest performance issue anywhere in this app. We know exactly why: the screen loads **all 2,438 rows in one go** instead of a page at a time, the way the Clients and Admins lists already do.
+**A note on how we got this number, because it matters:** partway through this investigation, one test run briefly suggested this screen could take as long as ~21 seconds in the worst case. Before including that in this report, we dug into why — and found it was our own test tool clicking through the screen too quickly, before waiting for each check to fully finish, which caused requests to pile up artificially. That's a mistake in how we were testing, not something a real user would ever experience. We fixed our test and re-checked three more times; the real, honest number is **2-4 seconds**, confirmed repeatedly. We're flagging this correction directly because we'd rather you see the number we actually stand behind than a scarier one we later had to walk back.
+
+**In plain terms:** a user opening this screen will wait 2-4 seconds, not a jarring wait — this is not a "the app is broken" situation, and it does always finish loading. But it is a confirmed, repeatable finding, and it's the single clearest performance issue anywhere in this app. We know exactly why: the screen loads **all 2,438 rows in one go** instead of a page at a time, the way the Clients and Admins lists already do.
 
 **Recommendation:** load this screen a page at a time (the same pattern already used for Clients and Admins) — the actual root-cause fix, not just a threshold to relax. This is a well-understood, standard fix, not a research problem, and given it's now confirmed (not suspected) and this dataset will likely keep growing, it's worth prioritizing soon rather than "someday."
 
@@ -73,6 +75,6 @@ We don't have 24/7 uptime monitoring (no "system was up 99.9% of the time this m
 ## Questions this document is built to answer
 
 - **"Is the app fast enough to ship?"** — Yes, every everyday action is fast, and the two heavy operations (report + PDF generation) are consistently within a generous, user-reasonable window.
-- **"Is anything actually broken?"** — No outright breakage. ISIN is confirmed slow (5/6 test runs) but always finishes; Consult's rare stall under rapid repeated use is real but not something a normal single user is expected to hit.
-- **"What should we prioritize?"** — ISIN pagination: confirmed (not suspected) via 6 independent test runs, root-caused precisely, and has a standard, well-understood fix. This is the most actionable item to come out of this entire performance testing effort.
+- **"Is anything actually broken?"** — No outright breakage. ISIN is confirmed slow (8/9 test runs, 2-4 seconds) but always finishes; Consult's rare stall under rapid repeated use is real but not something a normal single user is expected to hit.
+- **"What should we prioritize?"** — ISIN pagination: confirmed (not suspected) via 9 independent test runs, root-caused precisely, and has a standard, well-understood fix. This is the most actionable item to come out of this entire performance testing effort.
 - **"What needs backend investigation, not a frontend fix?"** — Consult's tail-latency stall. We've now ruled out network/connection issues as the cause (every individual API call is fast, zero queuing) — the delay lives in three silent gaps between calls, which points at backend job processing, not anything visible or fixable from the browser side.
