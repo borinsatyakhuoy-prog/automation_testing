@@ -416,6 +416,14 @@ The report toolbar (visible after Consult, alongside refresh/PDF/settings/list i
 
 **Seed:** `tests/seed.spec.ts`
 
+#### 12.5. Discovered: "Consolidation globale par titulaire" table's historical columns were empty for lack of historical data, not a bug (2026-07-24, by request - "help find a way to populate the data to make full")
+
+The report's "Consolidation globale par titulaire" section (a by-account/by-establishment breakdown, distinct from the top-level `/api/consolidation-global` totals - see `specs/performance-sla.md`'s endpoint catalog) renders three fixed date columns: prior year-end (31/12/25), six months back (30/06/26), and the consulted month itself (24/07/26 at the time of this investigation). Before this investigation, "QA Automation Client" only ever had Portfolio data imported for the current month, so the two historical columns showed "–" for every account row - not a report bug, just genuinely no data existing for those two specific dates.
+
+**Root cause confirmed and resolved** by re-importing the same `1. JDD_model_portefeuille.xlsx` fixture (already used by `report-lifecycle/001_portfolio.spec.ts`) for "QA Automation Client" twice more via Upload > Import, dated `12/2025` and `06/2026` respectively - the exact same safe, precedented pattern already used for the `01/2026` import in §12.4 above (re-importing this fixture only ever affects this one dedicated synthetic client, never shared/production client data). Both imports confirmed `COMPLETED` via `GET /api/audit`. Re-Consulting the current month afterward showed every account row's 31/12/25 and 30/06/26 columns now populated with real figures (e.g. BNP Banque Privée's accounts: `-€23,219.80` / `-€11,609.90` instead of `-`/`-`), and Perf MTD/YTD percentages now calculate correctly for every row instead of showing `-` for lack of a prior-period baseline to compare against.
+
+Not automated as a repeatable test - this was a one-time data-completeness fix for manual/visual verification of this specific table, not a new assertion. The two new imports are permanent (consistent with this client's existing accumulated import history across many prior test sessions) and don't need to be repeated; a future session wanting to verify this table's historical columns again can Consult directly without re-importing.
+
 #### 13.1. Setting & Privacy change-password page loads with live password rules (do not submit)
 
 **File:** `tests/fapa-test/settings/change-password-page.spec.ts`
